@@ -1,4 +1,5 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using CodexInputEnhancer.Models;
@@ -50,6 +51,7 @@ public sealed class WindowTracker
         }
         catch (ElementNotAvailableException) { return null; }
         catch (InvalidOperationException) { return null; }
+        catch (COMException) { return null; }
     }
 
     private static string? TryGetHeaderThreadTitle(AutomationElement root)
@@ -126,6 +128,7 @@ public sealed class WindowTracker
         }
         catch (ElementNotAvailableException) { return null; }
         catch (InvalidOperationException) { return null; }
+        catch (COMException) { return null; }
     }
 
     public bool IsGenerationInProgress(IntPtr windowHandle)
@@ -157,6 +160,7 @@ public sealed class WindowTracker
         }
         catch (ElementNotAvailableException) { }
         catch (InvalidOperationException) { }
+        catch (COMException) { }
         return false;
     }
 

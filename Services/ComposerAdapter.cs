@@ -1,4 +1,5 @@
-﻿using System.Windows.Automation;
+﻿using System.Runtime.InteropServices;
+using System.Windows.Automation;
 using CodexInputEnhancer.Models;
 
 namespace CodexInputEnhancer.Services;
@@ -24,6 +25,7 @@ public sealed class ComposerAdapter
             }
         }
         catch (ElementNotAvailableException) { }
+        catch (COMException) { }
 
         return null;
     }
@@ -58,6 +60,10 @@ public sealed class ComposerAdapter
         {
             return false;
         }
+        catch (COMException)
+        {
+            return false;
+        }
     }
 
     public bool WriteText(ComposerTarget target, string text)
@@ -74,6 +80,7 @@ public sealed class ComposerAdapter
         }
         catch (ElementNotAvailableException) { }
         catch (InvalidOperationException) { }
+        catch (COMException) { }
 
         return false;
     }

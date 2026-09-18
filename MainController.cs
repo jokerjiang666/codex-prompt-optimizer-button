@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using CodexInputEnhancer.Models;
@@ -98,6 +98,11 @@ public sealed class MainController : IDisposable
             catch (InvalidOperationException)
             {
                 break;
+            }
+            catch (Exception ex)
+            {
+                WriteDiagnostic($"tracker=apply-error type={ex.GetType().Name}");
+                try { await Task.Delay(350, _trackerCts.Token); } catch (TaskCanceledException) { break; }
             }
         }
     }
