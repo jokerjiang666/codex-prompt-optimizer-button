@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using CodexInputEnhancer.Models;
 using CodexInputEnhancer.Services;
@@ -391,7 +392,7 @@ public sealed class MainController : IDisposable
         if (_settingsWindow is not null)
         {
             if (showRecent) _settingsWindow.ShowRecentTab();
-            _settingsWindow.Activate();
+            BringToForeground(_settingsWindow);
             return;
         }
 
@@ -403,6 +404,18 @@ public sealed class MainController : IDisposable
         window.Closed += (_, _) => _settingsWindow = null;
         if (showRecent) window.ShowRecentTab();
         window.Show();
+        BringToForeground(window);
+    }
+
+    private static void BringToForeground(Window window)
+    {
+        window.Activate();
+        try
+        {
+            var handle = new WindowInteropHelper(window).EnsureHandle();
+            NativeWindowStyles.SetForegroundWindow(handle);
+        }
+        catch { }
     }
 
     private void OnSettingsSaved(AppSettings settings)
