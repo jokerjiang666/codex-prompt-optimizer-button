@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -16,6 +17,56 @@ public partial class OverlayWindow : Window
     private IntPtr _targetWindowHandle;
     private readonly DispatcherTimer _hintTimer;
     private ToolTip? _hintToolTip;
+    private IntPtr _menuMouseHook;
+    private LowLevelMouseProc? _menuMouseHookProc;
+    private ContextMenu? _openContextMenu;
+
+    private const int WhMouseLl = 14;
+    private const int WmLButtonDown = 0x0201;
+    private const int WmRButtonDown = 0x0204;
+    private const int WmMButtonDown = 0x0207;
+    private const int WmXButtonDown = 0x020B;
+    private const int WmNcLButtonDown = 0x00A1;
+    private const int WmNcRButtonDown = 0x00A4;
+    private const int WmNcMButtonDown = 0x00A7;
+    private const uint GaRoot = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point32
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MsllHookStruct
+    {
+        public Point32 Point;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
+    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(Point32 point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
     public event EventHandler? OptimizeRequested;
     public event EventHandler? UndoRequested;
@@ -195,6 +246,73 @@ public partial class OverlayWindow : Window
     private void ExitMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
         Application.Current.Shutdown();
+    }
+
+    private void ContextMenu_OnOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) return;
+
+        _openContextMenu = menu;
+        _menuMouseHookProc = MenuMouseHookCallback;
+        _menuMouseHook = SetWindowsHookEx(WhMouseLl, _menuMouseHookProc, GetModuleHandle(null), 0);
+    }
+
+    private void ContextMenu_OnClosed(object sender, RoutedEventArgs e)
+    {
+        _openContextMenu = null;
+        if (_menuMouseHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_menuMouseHook);
+            _menuMouseHook = IntPtr.Zero;
+        }
+
+        _menuMouseHookProc = null;
+    }
+
+    private IntPtr MenuMouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && _openContextMenu is { IsOpen: true })
+        {
+            var message = wParam.ToInt32();
+            if (message is WmLButtonDown or WmRButtonDown or WmMButtonDown or WmXButtonDown
+                or WmNcLButtonDown or WmNcRButtonDown or WmNcMButtonDown)
+            {
+                var hookData = Marshal.PtrToStructure<MsllHookStruct>(lParam);
+                if (!IsPointInsideContextMenu(hookData.Point))
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        if (_openContextMenu is { IsOpen: true })
+                            _openContextMenu.IsOpen = false;
+                    });
+                }
+            }
+        }
+
+        return CallNextHookEx(_menuMouseHook, nCode, wParam, lParam);
+    }
+
+    private bool IsPointInsideContextMenu(Point32 point)
+    {
+        if (_openContextMenu is null) return true;
+
+        try
+        {
+            if (PresentationSource.FromVisual(_openContextMenu) is not HwndSource source
+                || source.Handle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var handle = WindowFromPoint(point);
+            if (handle == IntPtr.Zero) return false;
+
+            return GetAncestor(handle, GaRoot) == source.Handle;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void ApplyTheme()
