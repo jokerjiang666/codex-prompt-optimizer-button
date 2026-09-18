@@ -1,4 +1,4 @@
-<Window x:Class="CodexInputEnhancer.OverlayWindow"
+﻿<Window x:Class="CodexInputEnhancer.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="30" Height="30"
@@ -144,7 +144,7 @@
                 Margin="2,0,0,0"
                 Click="OptimizeButton_OnClick">
             <Button.ContextMenu>
-                <ContextMenu>
+                <ContextMenu StaysOpen="False">
                     <MenuItem Header="设置…" Click="SettingsMenuItem_OnClick" />
                     <MenuItem x:Name="RecentMenuItem" Header="最近发送 (0)" Click="RecentMenuItem_OnClick" />
                     <MenuItem Header="清空最近记录" Click="ClearRecentMenuItem_OnClick" />
