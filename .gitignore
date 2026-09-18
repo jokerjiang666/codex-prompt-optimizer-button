@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+
+# Runtime data (may contain user settings or encrypted secrets)
+data/
+temp/
+runtime-status.log
+
+# IDE / user files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Symbols and packages
+*.pdb
+*.nupkg
+*.snupkg
+
+# Archives
+*.zip
+*.7z
+*.rar

@@ -1,0 +1,191 @@
+<Window x:Class="CodexInputEnhancer.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="30" Height="30"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True">
+    <Window.Resources>
+        <SolidColorBrush x:Key="IconBrush" Color="#181A19" />
+        <SolidColorBrush x:Key="UndoIconBrush" Color="#4D524E" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#E8EBE7" />
+        <SolidColorBrush x:Key="PressedBrush" Color="#DDE1DC" />
+        <SolidColorBrush x:Key="MenuSurfaceBrush" Color="#FEFFFE" />
+        <SolidColorBrush x:Key="MenuTextBrush" Color="#202321" />
+        <SolidColorBrush x:Key="MenuSubtleBrush" Color="#E4E7E3" />
+        <SolidColorBrush x:Key="MenuHoverBrush" Color="#F1F3F0" />
+        <SolidColorBrush x:Key="MenuPressedBrush" Color="#E7EAE6" />
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="11" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource PressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Loading">
+                                <Setter TargetName="Bg" Property="Background" Value="Transparent" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource MenuTextBrush}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HasDropShadow" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{DynamicResource MenuSurfaceBrush}"
+                                BorderBrush="{DynamicResource MenuSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="11"
+                                Padding="6"
+                                MinWidth="188">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#161816" BlurRadius="18" ShadowDepth="4" Opacity="0.16" />
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource MenuTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="ItemBg"
+                                Margin="0,1"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBg" Property="Background" Value="{DynamicResource MenuHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ItemBg" Property="Background" Value="{DynamicResource MenuPressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="Separator">
+            <Setter Property="Margin" Value="10,5" />
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Background="{DynamicResource MenuSubtleBrush}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <Button x:Name="UndoButton"
+                Style="{StaticResource IconButtonStyle}"
+                Visibility="Collapsed"
+                Click="UndoButton_OnClick">
+            <Viewbox Width="18" Height="18">
+                <Canvas Width="256" Height="256">
+                    <Path Data="M99,68 L54,102 L99,136"
+                          Fill="Transparent" Stroke="{DynamicResource UndoIconBrush}" StrokeThickness="20"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    <Path Data="M62,103 H145 C181,103 205,125 205,158 C205,191 180,214 145,214 H116"
+                          Fill="Transparent" Stroke="{DynamicResource UndoIconBrush}" StrokeThickness="20"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Canvas>
+            </Viewbox>
+        </Button>
+
+        <Button x:Name="OptimizeButton"
+                Style="{StaticResource IconButtonStyle}"
+                Margin="2,0,0,0"
+                Click="OptimizeButton_OnClick">
+            <Button.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="设置…" Click="SettingsMenuItem_OnClick" />
+                    <MenuItem x:Name="RecentMenuItem" Header="最近发送 (0)" Click="RecentMenuItem_OnClick" />
+                    <MenuItem Header="清空最近记录" Click="ClearRecentMenuItem_OnClick" />
+                    <Separator />
+                    <MenuItem Header="退出增强器" Click="ExitMenuItem_OnClick" />
+                </ContextMenu>
+            </Button.ContextMenu>
+            <Grid Width="18" Height="18">
+                <Viewbox x:Name="DefaultOptimizeIcon" Width="18" Height="18">
+                    <Canvas Width="256" Height="256">
+                        <Path Data="M126,30 C132,78 150,96 198,102 C150,108 132,126 126,174 C120,126 102,108 54,102 C102,96 120,78 126,30Z"
+                              Fill="{DynamicResource IconBrush}" />
+                        <Path Data="M190,142 C193.5,166 203,175.5 227,179 C203,182.5 193.5,192 190,216 C186.5,192 177,182.5 153,179 C177,175.5 186.5,166 190,142Z"
+                              Fill="{DynamicResource IconBrush}" />
+                        <Ellipse Canvas.Left="61" Canvas.Top="175" Width="22" Height="22" Fill="{DynamicResource IconBrush}" />
+                    </Canvas>
+                </Viewbox>
+                <Viewbox x:Name="LoadingVectorIcon" Width="18" Height="18" Visibility="Collapsed">
+                    <Grid Width="256" Height="256">
+                        <Canvas Width="256" Height="256">
+                            <Path Data="M128,72 C133,108 148,123 184,128 C148,133 133,148 128,184 C123,148 108,133 72,128 C108,123 123,108 128,72Z"
+                                  Fill="{DynamicResource IconBrush}" />
+                        </Canvas>
+                        <Canvas Width="256" Height="256" RenderTransformOrigin="0.5,0.5">
+                            <Canvas.RenderTransform>
+                                <RotateTransform x:Name="LoadingSpinnerRotate" />
+                            </Canvas.RenderTransform>
+                            <Path Data="M128,18 C130,31 135,36 148,38 C135,40 130,45 128,58 C126,45 121,40 108,38 C121,36 126,31 128,18Z"
+                                  Fill="{DynamicResource IconBrush}" />
+                            <Path Data="M214,84 C216,94 220,98 230,100 C220,102 216,106 214,116 C212,106 208,102 198,100 C208,98 212,94 214,84Z"
+                                  Fill="{DynamicResource IconBrush}" Opacity="0.9" />
+                            <Path Data="M181,185 C183,195 187,199 197,201 C187,203 183,207 181,217 C179,207 175,203 165,201 C175,199 179,195 181,185Z"
+                                  Fill="{DynamicResource IconBrush}" Opacity="0.8" />
+                            <Path Data="M75,185 C77,195 81,199 91,201 C81,203 77,207 75,217 C73,207 69,203 59,201 C69,199 73,195 75,185Z"
+                                  Fill="{DynamicResource IconBrush}" Opacity="0.7" />
+                            <Path Data="M42,86 C44,95 47,98 56,100 C47,102 44,105 42,114 C40,105 37,102 28,100 C37,98 40,95 42,86Z"
+                                  Fill="{DynamicResource IconBrush}" Opacity="0.6" />
+                        </Canvas>
+                    </Grid>
+                </Viewbox>
+            </Grid>
+        </Button>
+    </StackPanel>
+</Window>

@@ -1,0 +1,19 @@
+<Window x:Class="CodexInputEnhancer.TextTransitionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        IsHitTestVisible="False"
+        Topmost="True">
+    <Border x:Name="Surface" CornerRadius="12" Padding="8,5" Background="#FBFCFA">
+        <TextBlock x:Name="TransitionText"
+                   TextWrapping="Wrap"
+                   FontFamily="Segoe UI"
+                   FontSize="15"
+                   Foreground="#272A28" />
+    </Border>
+</Window>
