@@ -68,3 +68,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - 仅支持 Windows。
 - 依赖 Codex Desktop 的 UIAutomation 结构；Codex 更新后可能需要适配。
 - 使用 API 模式时，请自行确认目标服务的隐私和数据保留政策。
+
+## 致谢
+
+感谢 [LINUX DO](https://linux.do/) 社区提供开放、友善的技术交流平台。

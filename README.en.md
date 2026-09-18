@@ -68,3 +68,7 @@ Requires the .NET 8 SDK and Windows Desktop development tools.
 - Windows only.
 - Relies on Codex Desktop's UIAutomation structure; may need updates when Codex changes.
 - In API mode, review the target service's privacy and data-retention policies.
+
+## Acknowledgments
+
+Thanks to the [LINUX DO](https://linux.do/) community for providing an open and friendly technical exchange platform.
