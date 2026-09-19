@@ -15,20 +15,33 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
     }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // 记录启动/退出标记：日志里只有 start 没有 exit，说明进程是被强制结束或崩溃的。
+        WriteDiagnostic($"process=start pid={Environment.ProcessId}");
         _controller = new MainController(Dispatcher);
         _controller.Start();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        WriteDiagnostic($"process=exit code={e.ApplicationExitCode}");
         _controller?.Dispose();
         base.OnExit(e);
     }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        WriteDiagnostic($"process=session-ending reason={e.ReasonSessionEnding}");
+        base.OnSessionEnding(e);
+    }
+
+    private static void OnProcessExit(object? sender, EventArgs e) =>
+        WriteDiagnostic("process=process-exit");
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
@@ -49,7 +62,7 @@ public partial class App : Application
             WriteDiagnostic($"unhandled=appdomain type={ex.GetType().Name} terminating={e.IsTerminating}");
     }
 
-    private static void WriteDiagnostic(string state)
+    internal static void WriteDiagnostic(string state)
     {
         try
         {

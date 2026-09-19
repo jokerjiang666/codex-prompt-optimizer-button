@@ -8,6 +8,18 @@ namespace CodexInputEnhancer.Services;
 
 public sealed class WindowTracker
 {
+    // UIA 遍历整棵元素树的代价很高：同一轮刷新内复用一次 Button 快照，
+    // 顶层窗口枚举做 1 秒缓存，避免 350ms 轮询反复创建大量跨进程引用。
+    private static readonly TimeSpan ButtonSnapshotLifetime = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan HostSnapshotLifetime = TimeSpan.FromSeconds(1);
+
+    private IntPtr _buttonSnapshotHandle;
+    private List<AutomationElement>? _buttonSnapshot;
+    private DateTimeOffset _buttonSnapshotAt;
+
+    private List<(IntPtr Handle, Rect Bounds)>? _hostSnapshot;
+    private DateTimeOffset _hostSnapshotAt;
+
     public string? TryGetSessionIdentity(IntPtr windowHandle)
     {
         try
@@ -15,7 +27,7 @@ public sealed class WindowTracker
             var root = AutomationElement.FromHandle(windowHandle);
             if (root is null) return null;
 
-            var headerTitle = TryGetHeaderThreadTitle(root);
+            var headerTitle = TryGetHeaderThreadTitle(root, GetButtonSnapshot(windowHandle, root));
             if (!string.IsNullOrWhiteSpace(headerTitle))
                 return $"{root.Current.ProcessId}:{headerTitle}";
 
@@ -54,16 +66,12 @@ public sealed class WindowTracker
         catch (COMException) { return null; }
     }
 
-    private static string? TryGetHeaderThreadTitle(AutomationElement root)
+    private static string? TryGetHeaderThreadTitle(AutomationElement root, IReadOnlyList<AutomationElement> buttons)
     {
         try
         {
             var rootBounds = root.Current.BoundingRectangle;
             if (rootBounds.IsEmpty) return null;
-
-            var buttons = root.FindAll(
-                TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
 
             AutomationElement? best = null;
             var bestTop = double.MaxValue;
@@ -109,6 +117,7 @@ public sealed class WindowTracker
                 var root = AutomationElement.FromHandle(host.Handle);
                 if (root is null) continue;
 
+                var buttons = GetButtonSnapshot(host.Handle, root);
                 var processId = root.Current.ProcessId;
                 var element = FindBestCandidate(root, host.Bounds, ControlType.Edit)
                               ?? FindBestCandidate(root, host.Bounds, ControlType.Document)
@@ -118,7 +127,7 @@ public sealed class WindowTracker
                 if (element is not null)
                 {
                     var composerBounds = FindComposerBounds(element, host.Bounds);
-                    var permissionAnchor = FindPermissionAnchor(root, host.Bounds)
+                    var permissionAnchor = FindPermissionAnchor(host.Bounds, buttons)
                                            ?? FindGlobalPermissionAnchor(host.Bounds, root.Current.ProcessId);
                     return new ComposerTarget(host.Handle, element, composerBounds, permissionAnchor);
                 }
@@ -137,10 +146,8 @@ public sealed class WindowTracker
         {
             var root = AutomationElement.FromHandle(windowHandle);
             if (root is null) return false;
-            var buttons = root.FindAll(
-                TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
-            foreach (AutomationElement button in buttons)
+
+            foreach (var button in GetButtonSnapshot(windowHandle, root))
             {
                 try
                 {
@@ -164,7 +171,20 @@ public sealed class WindowTracker
         return false;
     }
 
-    private static IEnumerable<(IntPtr Handle, Rect Bounds)> FindHostWindows()
+    private IReadOnlyList<(IntPtr Handle, Rect Bounds)> FindHostWindows()
+    {
+        if (_hostSnapshot is not null
+            && DateTimeOffset.UtcNow - _hostSnapshotAt < HostSnapshotLifetime)
+        {
+            return _hostSnapshot;
+        }
+
+        _hostSnapshot = CollectHostWindows();
+        _hostSnapshotAt = DateTimeOffset.UtcNow;
+        return _hostSnapshot;
+    }
+
+    private static List<(IntPtr Handle, Rect Bounds)> CollectHostWindows()
     {
         var processIds = new HashSet<int>();
 
@@ -172,32 +192,36 @@ public sealed class WindowTracker
         {
             foreach (var process in Process.GetProcessesByName(processName))
             {
-                try
+                // Process 持有原生进程句柄，必须释放，否则 350ms 轮询会持续泄漏句柄。
+                using (process)
                 {
-                    if (string.Equals(processName, "ChatGPT", StringComparison.OrdinalIgnoreCase))
+                    try
                     {
-                        string? executablePath = null;
-                        try { executablePath = process.MainModule?.FileName; } catch { }
-
-                        if (!string.IsNullOrWhiteSpace(executablePath)
-                            && !executablePath.Contains("OpenAI.Codex", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(processName, "ChatGPT", StringComparison.OrdinalIgnoreCase))
                         {
-                            continue;
-                        }
-                    }
+                            string? executablePath = null;
+                            try { executablePath = process.MainModule?.FileName; } catch { }
 
-                    processIds.Add(process.Id);
+                            if (!string.IsNullOrWhiteSpace(executablePath)
+                                && !executablePath.Contains("OpenAI.Codex", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                        }
+
+                        processIds.Add(process.Id);
+                    }
+                    catch (InvalidOperationException) { }
                 }
-                catch (InvalidOperationException) { }
             }
         }
 
+        var hosts = new List<(IntPtr Handle, Rect Bounds)>();
         var desktop = AutomationElement.RootElement;
         if (desktop is null || processIds.Count == 0)
-            return Array.Empty<(IntPtr Handle, Rect Bounds)>();
+            return hosts;
 
         var windows = desktop.FindAll(TreeScope.Children, System.Windows.Automation.Condition.TrueCondition);
-        var hosts = new List<(IntPtr Handle, Rect Bounds)>();
         var seen = new HashSet<IntPtr>();
 
         foreach (AutomationElement window in windows)
@@ -217,7 +241,39 @@ public sealed class WindowTracker
             catch (ElementNotAvailableException) { }
         }
 
-        return hosts.OrderByDescending(host => host.Bounds.Width * host.Bounds.Height);
+        return hosts.OrderByDescending(host => host.Bounds.Width * host.Bounds.Height).ToList();
+    }
+
+    // 头部标题、权限锚点、生成状态都要遍历 Button 集合，
+    // 用一个很短的快照复用，避免同一轮刷新里重复遍历整棵元素树。
+    private List<AutomationElement> GetButtonSnapshot(IntPtr windowHandle, AutomationElement root)
+    {
+        if (_buttonSnapshot is not null
+            && _buttonSnapshotHandle == windowHandle
+            && DateTimeOffset.UtcNow - _buttonSnapshotAt < ButtonSnapshotLifetime)
+        {
+            return _buttonSnapshot;
+        }
+
+        var buttons = new List<AutomationElement>();
+        try
+        {
+            var found = root.FindAll(
+                TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+            foreach (AutomationElement button in found)
+            {
+                buttons.Add(button);
+            }
+        }
+        catch (ElementNotAvailableException) { }
+        catch (InvalidOperationException) { }
+        catch (COMException) { }
+
+        _buttonSnapshotHandle = windowHandle;
+        _buttonSnapshot = buttons;
+        _buttonSnapshotAt = DateTimeOffset.UtcNow;
+        return buttons;
     }
 
     private static AutomationElement? FindBestGlobalCandidate(Rect hostBounds, ControlType type, int processId)
@@ -320,14 +376,10 @@ public sealed class WindowTracker
         return best;
     }
 
-    private static Rect? FindPermissionAnchor(AutomationElement root, Rect hostBounds)
+    private static Rect? FindPermissionAnchor(Rect hostBounds, IReadOnlyList<AutomationElement> buttons)
     {
         try
         {
-            var buttons = root.FindAll(
-                TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
-
             Rect? best = null;
             foreach (AutomationElement button in buttons)
             {
@@ -353,7 +405,9 @@ public sealed class WindowTracker
                 catch (ElementNotAvailableException) { }
             }
 
-            return best;
+            if (best is null) return null;
+
+            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, hostBounds, EnumerateButtonBounds(buttons));
         }
         catch (ElementNotAvailableException)
         {
@@ -403,11 +457,31 @@ public sealed class WindowTracker
                 catch (ElementNotAvailableException) { }
             }
 
-            return best;
+            if (best is null) return null;
+
+            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, hostBounds, EnumerateButtonBounds(buttons));
         }
         catch (ElementNotAvailableException)
         {
             return null;
+        }
+    }
+
+    private static IEnumerable<Rect> EnumerateButtonBounds(System.Collections.IEnumerable buttons)
+    {
+        foreach (AutomationElement button in buttons)
+        {
+            Rect bounds;
+            try
+            {
+                if (button.Current.IsOffscreen) continue;
+                bounds = button.Current.BoundingRectangle;
+            }
+            catch (ElementNotAvailableException) { continue; }
+            catch (InvalidOperationException) { continue; }
+            catch (COMException) { continue; }
+
+            yield return bounds;
         }
     }
 

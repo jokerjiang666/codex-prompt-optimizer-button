@@ -245,6 +245,7 @@ public partial class OverlayWindow : Window
 
     private void ExitMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
+        App.WriteDiagnostic("exit=menu-command");
         Application.Current.Shutdown();
     }
 
