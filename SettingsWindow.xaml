@@ -1,4 +1,4 @@
-<Window x:Class="CodexInputEnhancer.SettingsWindow"
+﻿<Window x:Class="CodexInputEnhancer.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Codex Input Enhancer 设置"
@@ -61,6 +61,38 @@
             </Setter>
         </Style>
         <Style TargetType="TextBox" BasedOn="{StaticResource InputTextBoxStyle}" />
+
+        <Style x:Key="PillToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Track" CornerRadius="13" Background="#E1E5E0" />
+                            <Border x:Name="Thumb" Width="22" Height="22" CornerRadius="11" Background="White"
+                                    HorizontalAlignment="Left" Margin="2,0,0,0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#272A28" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,2,0" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.45" />
+                                <Setter TargetName="Thumb" Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style TargetType="PasswordBox">
             <Setter Property="FontSize" Value="14" />
@@ -498,67 +530,67 @@
                                   PanningMode="VerticalOnly"
                                   ScrollViewer.IsDeferredScrollingEnabled="False">
                         <StackPanel Margin="4,0,10,12">
-                            <TextBlock Text="AI 配置" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
-                            <TextBlock Text="选择提示词优化所使用的 AI 服务。默认继续使用本机 Codex。" Margin="0,5,0,18" FontSize="13" Foreground="{StaticResource SubtleBrush}" />
+                                <TextBlock Text="AI 配置" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                                <TextBlock Text="选择提示词优化所使用的 AI 服务。默认继续使用本机 Codex。" Margin="0,5,0,18" FontSize="13" Foreground="{StaticResource SubtleBrush}" />
 
-                            <TextBlock Text="AI 服务方式" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition />
-                                    <ColumnDefinition Width="10" />
-                                    <ColumnDefinition />
-                                </Grid.ColumnDefinitions>
-                                <RadioButton x:Name="CodexProviderRadio" Grid.Column="0" Style="{StaticResource ProviderRadioStyle}" Content="Codex CLI（默认）" GroupName="Provider" IsChecked="True" Checked="ProviderRadio_OnChecked" />
-                                <RadioButton x:Name="ApiProviderRadio" Grid.Column="2" Style="{StaticResource ProviderRadioStyle}" Content="OpenAI-compatible API" GroupName="Provider" Checked="ProviderRadio_OnChecked" />
-                            </Grid>
+                                <TextBlock Text="AI 服务方式" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition />
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton x:Name="CodexProviderRadio" Grid.Column="0" Style="{StaticResource ProviderRadioStyle}" Content="Codex CLI（默认）" GroupName="Provider" IsChecked="True" Checked="ProviderRadio_OnChecked" />
+                                    <RadioButton x:Name="ApiProviderRadio" Grid.Column="2" Style="{StaticResource ProviderRadioStyle}" Content="OpenAI-compatible API" GroupName="Provider" Checked="ProviderRadio_OnChecked" />
+                                </Grid>
 
-                            <TextBlock Text="API Base URL" FontWeight="SemiBold" Margin="0,15,0,6" />
-                            <TextBox x:Name="ApiBaseUrlBox" />
+                                <TextBlock Text="API Base URL" FontWeight="SemiBold" Margin="0,15,0,6" />
+                                <TextBox x:Name="ApiBaseUrlBox" />
 
-                            <TextBlock Text="API Key" FontWeight="SemiBold" Margin="0,13,0,6" />
-                            <PasswordBox x:Name="ApiKeyBox" />
-                            <TextBlock Text="仅在本机当前 Windows 用户下加密保存，不写入 settings.json 或日志。" FontSize="12" Margin="2,5,0,0" Foreground="{StaticResource SubtleBrush}" />
+                                <TextBlock Text="API Key" FontWeight="SemiBold" Margin="0,13,0,6" />
+                                <PasswordBox x:Name="ApiKeyBox" />
+                                <TextBlock Text="仅在本机当前 Windows 用户下加密保存，不写入 settings.json 或日志。" FontSize="12" Margin="2,5,0,0" Foreground="{StaticResource SubtleBrush}" />
 
-                            <Grid Margin="0,14,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition />
-                                    <ColumnDefinition Width="14" />
-                                    <ColumnDefinition />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <Grid Margin="0,0,0,6">
-                                        <TextBlock Text="Model" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                        <Button x:Name="GetModelsButton" Content="获取模型" Style="{StaticResource SecondaryButton}"
-                                                HorizontalAlignment="Right" MinHeight="28" Padding="10,0"
-                                                Click="GetModelsButton_OnClick" />
-                                    </Grid>
-                                    <ComboBox x:Name="ModelBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True">
-                                        <ComboBoxItem Content="gpt-5.6-sol" />
-                                        <ComboBoxItem Content="gpt-5.6-luna" />
-                                    </ComboBox>
-                                    <TextBlock x:Name="ModelFetchStatusText" FontSize="11" Margin="2,4,0,0" Foreground="{StaticResource SubtleBrush}" />
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition />
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="Model" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <Button x:Name="GetModelsButton" Content="获取模型" Style="{StaticResource SecondaryButton}"
+                                                    HorizontalAlignment="Right" MinHeight="28" Padding="10,0"
+                                                    Click="GetModelsButton_OnClick" />
+                                        </Grid>
+                                        <ComboBox x:Name="ModelBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True">
+                                            <ComboBoxItem Content="gpt-5.6-sol" />
+                                            <ComboBoxItem Content="gpt-5.6-luna" />
+                                        </ComboBox>
+                                        <TextBlock x:Name="ModelFetchStatusText" FontSize="11" Margin="2,4,0,0" Foreground="{StaticResource SubtleBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Reasoning effort" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <ComboBox x:Name="ReasoningBox" SelectedIndex="0">
+                                            <ComboBoxItem Content="low" />
+                                            <ComboBoxItem Content="medium" />
+                                            <ComboBoxItem Content="high" />
+                                        </ComboBox>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid Margin="0,15,0,7">
+                                    <TextBlock Text="优化提示词" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Button Content="恢复默认" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" MinHeight="34" Padding="12,0" Click="RestorePromptButton_OnClick" />
+                                </Grid>
+                                <TextBox x:Name="PromptBox" Height="154" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" />
+                                <TextBlock Text="保存后，下一次点击星芒优化时立即使用。" FontSize="12" Margin="2,5,0,0" Foreground="{StaticResource SubtleBrush}" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                    <Button x:Name="TestConnectionButton" Content="测试连接" Style="{StaticResource SecondaryButton}" Click="TestConnectionButton_OnClick" />
+                                    <TextBlock x:Name="TestStatusText" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Reasoning effort" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                    <ComboBox x:Name="ReasoningBox" SelectedIndex="0">
-                                        <ComboBoxItem Content="low" />
-                                        <ComboBoxItem Content="medium" />
-                                        <ComboBoxItem Content="high" />
-                                    </ComboBox>
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Margin="0,15,0,7">
-                                <TextBlock Text="优化提示词" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Content="恢复默认" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" MinHeight="34" Padding="12,0" Click="RestorePromptButton_OnClick" />
-                            </Grid>
-                            <TextBox x:Name="PromptBox" Height="154" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" />
-                            <TextBlock Text="保存后，下一次点击星芒优化时立即使用。" FontSize="12" Margin="2,5,0,0" Foreground="{StaticResource SubtleBrush}" />
-
-                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                                <Button x:Name="TestConnectionButton" Content="测试连接" Style="{StaticResource SecondaryButton}" Click="TestConnectionButton_OnClick" />
-                                <TextBlock x:Name="TestStatusText" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
-                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -623,7 +655,13 @@
                         </ListBox>
                     </Grid>
 
-                    <StackPanel x:Name="BehaviorPanel" Visibility="Collapsed" Margin="4,0,10,12">
+                    <ScrollViewer x:Name="BehaviorPanel"
+                                  Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  PanningMode="VerticalOnly"
+                                  ScrollViewer.IsDeferredScrollingEnabled="False">
+                        <StackPanel Margin="4,0,10,12">
                         <TextBlock Text="外观与行为" FontSize="23" FontWeight="SemiBold" />
                         <TextBlock Text="输入框增强器的本地行为设置。" Margin="0,5,0,20" FontSize="13" Foreground="{StaticResource SubtleBrush}" />
                         <Border Background="#FAFBFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="16">
@@ -632,7 +670,33 @@
                                 <TextBlock Text="发送后会立即清空本条撤回栈并隐藏撤回按钮。最近发送记录使用当前 Windows 用户加密存储。" TextWrapping="Wrap" Margin="30,9,0,0" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+
+                        <Border Background="#FAFBFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="16" Margin="0,14,0,0">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="自动检测中断并发送" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ToggleButton x:Name="AutoContinueToggle" Style="{StaticResource PillToggleStyle}" HorizontalAlignment="Right" />
+                                </Grid>
+                                <TextBlock Text="检测到中断或报错（例如 429 Too Many Requests）时，自动发送下面的内容。默认关闭。" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
+                                <TextBlock Text="发送内容" FontWeight="SemiBold" Margin="0,16,0,6" />
+                                <TextBox x:Name="AutoContinueTextBox" MaxLength="200" />
+                                <TextBlock Text="留空时使用默认内容「继续」。悬浮窗的继续按钮与自动继续共用这段内容。" TextWrapping="Wrap" Margin="2,5,0,0" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
+                                <TextBlock Text="两次自动继续的最小间隔（秒）" FontWeight="SemiBold" Margin="0,14,0,6" />
+                                <TextBox x:Name="AutoContinueIntervalBox" Width="120" HorizontalAlignment="Left" MaxLength="4" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#FAFBFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="16" Margin="0,14,0,0">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="显示悬浮窗的「继续」按钮" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ToggleButton x:Name="ShowContinueToggle" Style="{StaticResource PillToggleStyle}" HorizontalAlignment="Right" />
+                                </Grid>
+                                <TextBlock Text="关闭后悬浮窗只保留优化按钮；自动继续开关不受影响。" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
+                            </StackPanel>
+                        </Border>
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <StackPanel x:Name="AboutPanel" Visibility="Collapsed" Margin="4,0,10,12">
                         <TextBlock Text="关于" FontSize="23" FontWeight="SemiBold" />

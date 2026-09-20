@@ -25,5 +25,16 @@ public sealed class AppSettings
     public string ReasoningEffort { get; set; } = "low";
     public int TimeoutSeconds { get; set; } = 60;
     public bool HistoryEnabled { get; set; } = true;
+    /// <summary>检测到中断/报错时自动发送继续内容（默认关闭）。</summary>
+    public bool AutoContinueEnabled { get; set; }
+
+    /// <summary>继续内容：悬浮窗继续按钮与自动继续共用。</summary>
+    public string AutoContinueText { get; set; } = "继续";
+
+    /// <summary>两次自动继续之间的最小间隔（秒）。</summary>
+    public int AutoContinueMinIntervalSeconds { get; set; } = 10;
+
+    /// <summary>是否在悬浮窗显示「继续」按钮。</summary>
+    public bool ShowContinueButton { get; set; } = true;
     public string OptimizationPrompt { get; set; } = DefaultOptimizationPrompt;
 }

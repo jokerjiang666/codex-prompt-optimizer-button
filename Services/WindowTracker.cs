@@ -485,6 +485,143 @@ public sealed class WindowTracker
         }
     }
 
+    /// <summary>
+    /// 输入框右下角的发送键。名称会随状态变化（发送 / 加入队列 / Send…），
+    /// 因此用「名称白名单 + 与输入框同行 + 右半边 + 排除停止类按钮」定位，取最右侧那个。
+    /// </summary>
+    public AutomationElement? TryFindSendButton(IntPtr windowHandle, Rect composerBounds, out string buttonName)
+    {
+        buttonName = string.Empty;
+        try
+        {
+            var root = AutomationElement.FromHandle(windowHandle);
+            if (root is null) return null;
+
+            AutomationElement? best = null;
+            var bestLeft = double.MinValue;
+
+            foreach (var button in GetButtonSnapshot(windowHandle, root))
+            {
+                try
+                {
+                    if (button.Current.IsOffscreen || !button.Current.IsEnabled) continue;
+
+                    var name = (button.Current.Name ?? string.Empty).Trim();
+                    if (!IsSendButtonName(name)) continue;
+
+                    var bounds = button.Current.BoundingRectangle;
+                    if (bounds.IsEmpty) continue;
+                    if (bounds.Top > composerBounds.Bottom + 12) continue;
+                    if (bounds.Bottom < composerBounds.Top) continue;
+                    if (bounds.Left < composerBounds.Left + composerBounds.Width * 0.5) continue;
+                    if (bounds.Left <= bestLeft) continue;
+
+                    best = button;
+                    bestLeft = bounds.Left;
+                    buttonName = name;
+                }
+                catch (ElementNotAvailableException) { }
+                catch (InvalidOperationException) { }
+                catch (COMException) { }
+            }
+
+            return best;
+        }
+        catch (ElementNotAvailableException) { return null; }
+        catch (InvalidOperationException) { return null; }
+        catch (COMException) { return null; }
+    }
+
+    private static bool IsSendButtonName(string name)
+    {
+        if (name.Length == 0) return false;
+        if (IsStopButtonName(name)) return false;
+
+        return name is "发送" or "加入队列" or "排队" or "提交" or "发送消息"
+               || name.Contains("发送", StringComparison.Ordinal)
+               || name.Contains("Send", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Queue", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Submit", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStopButtonName(string name) =>
+        name.Contains("停止", StringComparison.Ordinal)
+        || name.Contains("中断", StringComparison.Ordinal)
+        || name.Contains("Stop", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 生成结束后扫描会话尾部，判断是否为中断/报错。
+    /// 只在「生成中 → 空闲」翻转时调用，避免高频整树遍历。
+    /// </summary>
+    public bool TryGetInterruptionSignal(IntPtr windowHandle, Rect composerBounds, out string signature, out string source)
+    {
+        signature = string.Empty;
+        source = string.Empty;
+
+        try
+        {
+            var root = AutomationElement.FromHandle(windowHandle);
+            if (root is null) return false;
+
+            var tailTop = composerBounds.Top - 620;
+
+            var textCondition = new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text);
+            var texts = root.FindAll(TreeScope.Descendants, textCondition);
+
+            var scanned = 0;
+            for (var i = texts.Count - 1; i >= 0 && scanned < 120; i--)
+            {
+                try
+                {
+                    var element = texts[i];
+                    var bounds = element.Current.BoundingRectangle;
+                    if (bounds.IsEmpty || bounds.Height <= 0) continue;
+                    if (bounds.Bottom > composerBounds.Top + 4 || bounds.Bottom < tailTop) continue;
+
+                    scanned++;
+                    if (!InterruptionDetector.IsInterruption(element.Current.Name, out var found)) continue;
+
+                    signature = found;
+                    source = "text";
+                    return true;
+                }
+                catch (ElementNotAvailableException) { }
+                catch (InvalidOperationException) { }
+                catch (COMException) { }
+            }
+
+            // 备用信号：错误旁边出现「重试」按钮。
+            foreach (var button in GetButtonSnapshot(windowHandle, root))
+            {
+                try
+                {
+                    if (button.Current.IsOffscreen || !button.Current.IsEnabled) continue;
+
+                    var name = (button.Current.Name ?? string.Empty).Trim();
+                    if (!IsRetryButtonName(name)) continue;
+
+                    var bounds = button.Current.BoundingRectangle;
+                    if (bounds.IsEmpty) continue;
+                    if (bounds.Bottom > composerBounds.Top + 4 || bounds.Bottom < tailTop) continue;
+
+                    signature = "retry-button";
+                    source = "retry-button";
+                    return true;
+                }
+                catch (ElementNotAvailableException) { }
+                catch (InvalidOperationException) { }
+                catch (COMException) { }
+            }
+
+            return false;
+        }
+        catch (ElementNotAvailableException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (COMException) { return false; }
+    }
+
+    private static bool IsRetryButtonName(string name) =>
+        name is "重试" or "Retry" or "重新尝试" or "再试一次";
     private static bool SupportsWritableValue(AutomationElement element)
     {
         try

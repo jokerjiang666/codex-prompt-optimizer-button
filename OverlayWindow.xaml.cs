@@ -13,6 +13,7 @@ namespace CodexInputEnhancer;
 public partial class OverlayWindow : Window
 {
     private bool _hasUndo;
+    private bool _hasContinue = true;
     private bool _isOptimizing;
     private IntPtr _targetWindowHandle;
     private readonly DispatcherTimer _hintTimer;
@@ -69,6 +70,7 @@ public partial class OverlayWindow : Window
     private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
     public event EventHandler? OptimizeRequested;
+    public event EventHandler? ContinueRequested;
     public event EventHandler? UndoRequested;
     public event EventHandler? CancelRequested;
     public event EventHandler? SettingsRequested;
@@ -79,6 +81,7 @@ public partial class OverlayWindow : Window
     {
         InitializeComponent();
         ApplyTheme();
+        UpdateWidth();
         _hintTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(1800), DispatcherPriority.Background,
             (_, _) => CloseHint(), Dispatcher);
     }
@@ -96,7 +99,7 @@ public partial class OverlayWindow : Window
     {
         if (_hasUndo == visible) return;
         _hasUndo = visible;
-        Width = visible ? 60 : 30;
+        UpdateWidth();
 
         if (!visible)
         {
@@ -115,6 +118,35 @@ public partial class OverlayWindow : Window
         UndoButton.BeginAnimation(OpacityProperty,
             new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
     }
+
+    /// <summary>「继续」按钮显隐（设置里可关闭，关闭后悬浮窗只剩优化按钮）。</summary>
+    public void SetContinueVisible(bool visible, bool animate = true)
+    {
+        if (_hasContinue == visible) return;
+        _hasContinue = visible;
+        UpdateWidth();
+
+        if (!visible)
+        {
+            ContinueButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ContinueButton.Visibility = Visibility.Visible;
+        if (!animate)
+        {
+            ContinueButton.Opacity = 1;
+            return;
+        }
+
+        ContinueButton.Opacity = 0;
+        ContinueButton.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+    }
+
+    // 窗口宽度 = 可见按钮数 × 30；右边缘始终锚定在目标芯片右侧，因此向左扩展。
+    private void UpdateWidth() =>
+        Width = 30 + (_hasContinue ? 30 : 0) + (_hasUndo ? 30 : 0);
 
     public void SetOptimizing(bool optimizing)
     {
@@ -232,6 +264,12 @@ public partial class OverlayWindow : Window
 
     private void ClearRecentMenuItem_OnClick(object sender, RoutedEventArgs e) =>
         ClearRecentRequested?.Invoke(this, EventArgs.Empty);
+
+    private void ContinueButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_isOptimizing) return;
+        ContinueRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void UndoButton_OnClick(object sender, RoutedEventArgs e)
     {

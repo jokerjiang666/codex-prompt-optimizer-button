@@ -51,6 +51,10 @@ public partial class SettingsWindow : Window
         ModelBox.Text = settings.Model;
         PromptBox.Text = settings.OptimizationPrompt;
         HistoryEnabledCheckBox.IsChecked = settings.HistoryEnabled;
+        ShowContinueToggle.IsChecked = settings.ShowContinueButton;
+        AutoContinueToggle.IsChecked = settings.AutoContinueEnabled;
+        AutoContinueTextBox.Text = string.IsNullOrWhiteSpace(settings.AutoContinueText) ? "继续" : settings.AutoContinueText;
+        AutoContinueIntervalBox.Text = Math.Clamp(settings.AutoContinueMinIntervalSeconds, 3, 600).ToString();
         SelectReasoning(settings.ReasoningEffort);
         UpdateApiFields();
     }
@@ -63,10 +67,20 @@ public partial class SettingsWindow : Window
         ReasoningEffort = SelectedReasoning(),
         TimeoutSeconds = 60,
         HistoryEnabled = HistoryEnabledCheckBox.IsChecked != false,
+        ShowContinueButton = ShowContinueToggle.IsChecked != false,
+        AutoContinueEnabled = AutoContinueToggle.IsChecked == true,
+        AutoContinueText = string.IsNullOrWhiteSpace(AutoContinueTextBox.Text) ? "继续" : AutoContinueTextBox.Text.Trim(),
+        AutoContinueMinIntervalSeconds = ParseAutoContinueInterval(AutoContinueIntervalBox.Text),
         OptimizationPrompt = string.IsNullOrWhiteSpace(PromptBox.Text)
             ? AppSettings.DefaultOptimizationPrompt
             : PromptBox.Text.Trim()
     };
+
+    private static int ParseAutoContinueInterval(string? text)
+    {
+        if (!int.TryParse((text ?? string.Empty).Trim(), out var seconds)) return 10;
+        return Math.Clamp(seconds, 3, 600);
+    }
 
     private void SelectReasoning(string value)
     {

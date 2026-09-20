@@ -66,6 +66,26 @@ public sealed class ComposerAdapter
         }
     }
 
+    /// <summary>调用 UIA 按钮（发送键）。失败时给出可记录的原因。</summary>
+    public bool TryInvoke(AutomationElement element, out string failure)
+    {
+        failure = string.Empty;
+        try
+        {
+            if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var patternObject)
+                && patternObject is InvokePattern invoke)
+            {
+                invoke.Invoke();
+                return true;
+            }
+
+            failure = "no-invoke-pattern";
+            return false;
+        }
+        catch (ElementNotAvailableException) { failure = "element-unavailable"; return false; }
+        catch (InvalidOperationException) { failure = "invalid-operation"; return false; }
+        catch (COMException) { failure = "com-exception"; return false; }
+    }
     public bool WriteText(ComposerTarget target, string text)
     {
         try

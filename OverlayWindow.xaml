@@ -187,5 +187,22 @@
                 </Viewbox>
             </Grid>
         </Button>
+
+        <Button x:Name="ContinueButton"
+                Style="{StaticResource IconButtonStyle}"
+                Margin="2,0,0,0"
+                ToolTip="继续（发送设置里的继续内容）"
+                Click="ContinueButton_OnClick">
+            <Viewbox Width="18" Height="18">
+                <Canvas Width="256" Height="256">
+                    <Path Data="M46,106 L128,56 L210,106"
+                          Fill="Transparent" Stroke="{DynamicResource IconBrush}" StrokeThickness="20"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                    <Path Data="M46,206 L128,156 L210,206"
+                          Fill="Transparent" Stroke="{DynamicResource IconBrush}" StrokeThickness="20"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Canvas>
+            </Viewbox>
+        </Button>
     </StackPanel>
 </Window>

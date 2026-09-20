@@ -35,6 +35,9 @@ public sealed class MainController : IDisposable
     private DateTimeOffset _lastAnchorSeenAt;
     private string? _lastSessionIdentity;
     private bool _lastGenerationInProgress;
+    private bool _continueInFlight;
+    private int _autoContinueCount;
+    private DateTimeOffset _lastAutoContinueAt = DateTimeOffset.MinValue;
 
     public MainController(Dispatcher dispatcher)
     {
@@ -44,6 +47,7 @@ public sealed class MainController : IDisposable
         _settings = _settingsStore.Load();
         _optimizer = OptimizerProviderFactory.Create(_settings, _secretStore.Read());
 
+        _overlay.ContinueRequested += OnContinueRequested;
         _overlay.OptimizeRequested += OnOptimizeRequested;
         _overlay.UndoRequested += OnUndoRequested;
         _overlay.CancelRequested += OnCancelRequested;
@@ -51,6 +55,7 @@ public sealed class MainController : IDisposable
         _overlay.RecentRequested += (_, _) => ShowSettings(showRecent: true);
         _overlay.ClearRecentRequested += OnClearRecentRequested;
         _overlay.SetRecentCount(_recentHistoryStore.Load().Count);
+        _overlay.SetContinueVisible(_settings.ShowContinueButton, animate: false);
     }
 
     public void Start()
@@ -162,6 +167,8 @@ public sealed class MainController : IDisposable
             _lastObservedDraft = snapshot.Draft ?? string.Empty;
             _pendingSentText = null;
             _lastPermissionAnchorBounds = null;
+            _autoContinueCount = 0;
+            _lastAutoContinueAt = DateTimeOffset.MinValue;
             WriteDiagnostic(sessionChanged
                 ? $"session=changed undo=hidden identity={sessionIdentity}"
                 : "window=changed undo=hidden");
@@ -171,7 +178,10 @@ public sealed class MainController : IDisposable
         if (!string.IsNullOrWhiteSpace(sessionIdentity))
             _lastSessionIdentity = sessionIdentity;
 
+        var wasGenerating = _lastGenerationInProgress;
         ApplyDraftSnapshot(snapshot.Draft, snapshot.GenerationInProgress);
+        if (wasGenerating && !snapshot.GenerationInProgress)
+            OnGenerationEnded(target);
 
         if (target.PermissionAnchorBounds is { } freshAnchor && !freshAnchor.IsEmpty)
         {
@@ -385,6 +395,125 @@ public sealed class MainController : IDisposable
         }
     }
 
+    private void OnContinueRequested(object? sender, EventArgs e) => _ = ContinueAsync("continue");
+
+    /// <summary>手动点「继续」：写入设置内容并发送。</summary>
+    private async Task ContinueAsync(string source)
+    {
+        if (_busy) return;
+
+        var target = _windowTracker.TryFindComposer();
+        if (target is null || !_composerAdapter.CanWrite(target))
+        {
+            WriteDiagnostic($"{source}=ignored reason=no-current-composer");
+            _overlay.ShowHint("请先打开 Codex 输入框");
+            return;
+        }
+
+        var current = _composerAdapter.ReadText(target) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(current))
+        {
+            WriteDiagnostic($"{source}=ignored reason=draft-not-empty");
+            _overlay.ShowHint("输入框已有内容");
+            return;
+        }
+
+        await SendContinueAsync(target, source);
+    }
+
+    private string ResolveContinueText()
+    {
+        var text = _settings.AutoContinueText?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? "继续" : text;
+    }
+
+    /// <summary>写入内容 → 调用发送键 → 校验输入框是否清空。</summary>
+    private async Task<bool> SendContinueAsync(ComposerTarget target, string source)
+    {
+        if (!_composerAdapter.WriteText(target, ResolveContinueText()))
+        {
+            WriteDiagnostic($"{source}=failed reason=write-text");
+            _overlay.ShowHint("写入失败，请手动输入");
+            return false;
+        }
+
+        await Task.Delay(140);
+
+        var button = _windowTracker.TryFindSendButton(target.WindowHandle, target.Bounds, out var buttonName);
+        if (button is null)
+        {
+            WriteDiagnostic($"{source}=failed reason=send-button-not-found");
+            _overlay.ShowHint("没找到发送按钮，请手动回车");
+            return false;
+        }
+
+        if (!_composerAdapter.TryInvoke(button, out var failure))
+        {
+            WriteDiagnostic($"{source}=failed reason={failure} button={buttonName}");
+            _overlay.ShowHint("发送失败，请手动回车");
+            return false;
+        }
+
+        WriteDiagnostic($"{source}=invoked button={buttonName}");
+
+        for (var i = 0; i < 12; i++)
+        {
+            await Task.Delay(120);
+            if (!string.IsNullOrWhiteSpace(_composerAdapter.ReadText(target))) continue;
+
+            WriteDiagnostic($"{source}=verified draft=cleared");
+            return true;
+        }
+
+        WriteDiagnostic($"{source}=unverified reason=draft-not-cleared");
+        _overlay.ShowHint("已写入但未确认发送，请手动回车");
+        return false;
+    }
+
+    /// <summary>生成刚结束：扫描是否为中断，是则自动继续（无次数上限，受间隔约束）。</summary>
+    private void OnGenerationEnded(ComposerTarget target)
+    {
+        if (!_settings.AutoContinueEnabled) return;
+        if (_continueInFlight) return;
+
+        if (!_windowTracker.TryGetInterruptionSignal(target.WindowHandle, target.Bounds, out var signature, out var signalSource))
+            return;
+
+        var interval = TimeSpan.FromSeconds(Math.Clamp(_settings.AutoContinueMinIntervalSeconds, 3, 600));
+        var elapsed = DateTimeOffset.Now - _lastAutoContinueAt;
+        if (elapsed < interval)
+        {
+            WriteDiagnostic($"autocontinue=skipped reason=cooldown remainMs={(int)(interval - elapsed).TotalMilliseconds}");
+            return;
+        }
+
+        _ = AutoContinueAsync(target, signature, signalSource);
+    }
+
+    private async Task AutoContinueAsync(ComposerTarget target, string signature, string signalSource)
+    {
+        if (_continueInFlight) return;
+        _continueInFlight = true;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_composerAdapter.ReadText(target)))
+            {
+                WriteDiagnostic("autocontinue=skipped reason=draft-not-empty");
+                return;
+            }
+
+            _lastAutoContinueAt = DateTimeOffset.Now;
+            _autoContinueCount++;
+            WriteDiagnostic($"autocontinue=triggered count={_autoContinueCount} source={signalSource} signature={signature}");
+            await SendContinueAsync(target, "autocontinue");
+        }
+        finally
+        {
+            _continueInFlight = false;
+        }
+    }
+
     private void OnCancelRequested(object? sender, EventArgs e) => _optimizeCts?.Cancel();
 
     private void ShowSettings(bool showRecent)
@@ -423,6 +552,7 @@ public sealed class MainController : IDisposable
         _optimizeCts?.Cancel();
         _settings = settings;
         _optimizer = OptimizerProviderFactory.Create(_settings, _secretStore.Read());
+        _overlay.SetContinueVisible(_settings.ShowContinueButton, animate: false);
         WriteDiagnostic($"settings=saved provider={_settings.Provider} model={_settings.Model}");
     }
 

@@ -13,6 +13,8 @@
 - Keeps recent-send history encrypted with Windows DPAPI.
 - Lets you customize the optimization prompt in Settings.
 - Shows the overlay only when Codex is in the foreground.
+- Adds a "Continue" button: when the composer is empty, it writes your configured continue text (default `继续`) and sends it. The button can be hidden in Settings.
+- Optional auto-continue on interruption (off by default): when an interruption/error such as `429 Too Many Requests` is detected, it sends the configured text automatically. Interval defaults to 10 seconds, with no attempt cap.
 
 ## Requirements
 
@@ -35,7 +37,8 @@ Get the latest build from Releases:
 3. A star icon appears next to the "Full access/Access" control in the composer.
 4. Type a draft and click the star to optimize it.
 5. The draft is replaced; click the rotate icon to undo step by step.
-6. Right-click the star to open Settings, view recent sends, clear history, or exit.
+6. Click the double chevron (pointing up) next to the star to send the continue text in one click (the composer must be empty).
+7. Right-click the star to open Settings, view recent sends, clear history, or exit.
 
 ## Configuration
 
@@ -44,6 +47,7 @@ Get the latest build from Releases:
 - API keys are encrypted with Windows DPAPI for the current user; they are never written to `settings.json` or logs.
 - `data/settings.json` is created automatically on first launch.
 - Configure your own API Base URL, model, and API key. The repository and releases do not contain any secrets or private API endpoints.
+- Settings > Appearance & Behavior: continue text (default `继续`), auto-continue interval (default 10s), auto-continue on interruption (off by default), and whether to show the Continue button (on by default).
 
 ## Privacy and Security
 
@@ -52,6 +56,7 @@ Get the latest build from Releases:
 - Undo history stays in memory.
 - `runtime-status.log` records connection/window state and error types only, never input content.
 - In API mode, input content is sent to the endpoint you configure.
+- Auto-continue matches error patterns against conversation text locally; only status and error signatures are logged, never conversation content.
 
 ## Build from Source
 
@@ -67,7 +72,9 @@ Requires the .NET 8 SDK and Windows Desktop development tools.
 
 - Windows only.
 - Relies on Codex Desktop's UIAutomation structure; may need updates when Codex changes.
-- In API mode, review the target service's privacy and data-retention policies.
+- In API mode, review the target service''s privacy and data-retention policies.
+- Auto-continue relies on error wording patterns and the UIAutomation structure, so unrecognized error types are ignored; sending relies on the send button''s UIA name/position and falls back to a "press Enter manually" hint.
+- Auto-continue is off by default and has no attempt cap: if errors keep occurring it will keep retrying at the configured interval, so watch your quota and turn the switch off when needed.
 
 ## Acknowledgments
 
