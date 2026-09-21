@@ -10,8 +10,8 @@
     <RootNamespace>CodexInputEnhancer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\CodexInputEnhancer.ico</ApplicationIcon>
-    <Version>1.2.0</Version>
-    <FileVersion>1.2.0.0</FileVersion>
+    <Version>1.2.1</Version>
+    <FileVersion>1.2.1.0</FileVersion>
     <!-- 保留 app.manifest 的 PerMonitorV2（悬浮窗定位依赖它）；这里只是 WinForms 分析器的建议性告警。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
