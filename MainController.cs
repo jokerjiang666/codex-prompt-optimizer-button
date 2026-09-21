@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -35,6 +36,7 @@ public sealed class MainController : IDisposable
     private DateTimeOffset _lastAnchorSeenAt;
     private string? _lastSessionIdentity;
     private bool _lastGenerationInProgress;
+    private int _loopCount;
     private bool _continueInFlight;
     private int _autoContinueCount;
     private DateTimeOffset _lastAutoContinueAt = DateTimeOffset.MinValue;
@@ -86,14 +88,19 @@ public sealed class MainController : IDisposable
             catch (Exception ex)
             {
                 WriteDiagnostic($"tracker=error type={ex.GetType().Name}");
-                try { await Task.Delay(350, _trackerCts.Token); } catch (TaskCanceledException) { break; }
+                try { await Task.Delay(500, _trackerCts.Token); } catch (TaskCanceledException) { break; }
                 continue;
             }
 
             try
             {
                 await _dispatcher.InvokeAsync(() => ApplyTrackerSnapshot(snapshot));
-                await Task.Delay(350, _trackerCts.Token);
+                if (++_loopCount % 600 == 0)
+                {
+                    LogMemory();
+                    TrimMemory();
+                }
+                await Task.Delay(500, _trackerCts.Token);
             }
             catch (TaskCanceledException)
             {
@@ -110,7 +117,7 @@ public sealed class MainController : IDisposable
             catch (Exception ex)
             {
                 WriteDiagnostic($"tracker=apply-error type={ex.GetType().Name}");
-                try { await Task.Delay(350, _trackerCts.Token); } catch (TaskCanceledException) { break; }
+                try { await Task.Delay(500, _trackerCts.Token); } catch (TaskCanceledException) { break; }
             }
         }
     }
@@ -164,6 +171,7 @@ public sealed class MainController : IDisposable
 
         if (windowChanged || sessionChanged)
         {
+            _windowTracker.InvalidateComposerCache();
             _history.Reset();
             _overlay.SetUndoVisible(false, animate: false);
             _lastObservedDraft = snapshot.Draft ?? string.Empty;
@@ -226,6 +234,7 @@ public sealed class MainController : IDisposable
 
         if (generationStarted && _history.CanUndo)
         {
+            _windowTracker.InvalidateComposerCache();
             _history.Reset();
             _overlay.SetUndoVisible(false, animate: false);
             if (_busy) _optimizeCts?.Cancel();
@@ -234,6 +243,7 @@ public sealed class MainController : IDisposable
 
         if (draftCleared || sentBeforeNextDraftSample)
         {
+            _windowTracker.InvalidateComposerCache();
             _history.Reset();
             _overlay.SetUndoVisible(false, animate: false);
             if (_busy) _optimizeCts?.Cancel();
@@ -366,7 +376,8 @@ public sealed class MainController : IDisposable
             {
                 if (draftNow is not null)
                 {
-                    _history.Reset();
+                    _windowTracker.InvalidateComposerCache();
+            _history.Reset();
                     _overlay.SetUndoVisible(false, animate: false);
                 }
 
@@ -685,6 +696,7 @@ public sealed class MainController : IDisposable
 
         if (_composerAdapter.WriteText(target, text))
         {
+            _windowTracker.InvalidateComposerCache();
             _history.Reset();
             _overlay.SetUndoVisible(false, animate: false);
             _lastObservedDraft = text;
@@ -712,6 +724,41 @@ public sealed class MainController : IDisposable
         _settingsWindow?.RefreshRecent();
     }
 
+    /// <summary>
+    [System.Runtime.InteropServices.DllImport("psapi.dll")]
+    private static extern bool EmptyWorkingSet(IntPtr processHandle);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    /// UIA 的跨进程对象靠终结器释放，托盘小工具长期驻留时工作集会越飘越高。
+    /// 空闲时（不在优化/发送中）做一次代际回收 + 工作集修剪，把已释放的页还给系统。
+    /// </summary>
+    private void TrimMemory()
+    {
+        if (_busy || _continueInFlight) return;
+
+        try
+        {
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: false);
+            GC.WaitForPendingFinalizers();
+            EmptyWorkingSet(GetCurrentProcess());
+            WriteDiagnostic("mem=trimmed");
+        }
+        catch { }
+    }
+    /// <summary>每 5 分钟记一行内存，便于确认轮询不再持续长胖。</summary>
+    private void LogMemory()
+    {
+        try
+        {
+            var gcMb = GC.GetTotalMemory(forceFullCollection: false) / 1024 / 1024;
+            using var process = Process.GetCurrentProcess();
+            var wsMb = process.WorkingSet64 / 1024 / 1024;
+            WriteDiagnostic($"mem=gc{gcMb}MB ws{wsMb}MB handles={process.HandleCount}");
+        }
+        catch { }
+    }
     private void WriteDiagnostic(string state)
     {
         lock (_diagnosticLock)

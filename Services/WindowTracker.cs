@@ -10,26 +10,50 @@ public sealed class WindowTracker
 {
     // UIA 遍历整棵元素树的代价很高：同一轮刷新内复用一次 Button 快照，
     // 顶层窗口枚举做 1 秒缓存，避免 350ms 轮询反复创建大量跨进程引用。
-    private static readonly TimeSpan ButtonSnapshotLifetime = TimeSpan.FromMilliseconds(400);
-    private static readonly TimeSpan HostSnapshotLifetime = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ButtonSnapshotLifetime = TimeSpan.FromMilliseconds(2000);
+    private static readonly TimeSpan HostSnapshotLifetime = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RootSnapshotLifetime = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ComposerCacheLifetime = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SessionCacheLifetime = TimeSpan.FromSeconds(2);
 
     private IntPtr _buttonSnapshotHandle;
-    private List<AutomationElement>? _buttonSnapshot;
+    private List<ButtonInfo>? _buttonSnapshot;
     private DateTimeOffset _buttonSnapshotAt;
+
+    private string? _sessionCacheKey;
+    private DateTimeOffset _sessionCacheAt;
+
+    private IntPtr _composerCacheHandle;
+    private AutomationElement? _composerCacheElement;
+    private DateTimeOffset _composerCacheAt;
+
+    private IntPtr _rootHandle;
+    private AutomationElement? _rootSnapshot;
+    private DateTimeOffset _rootSnapshotAt;
+
+    /// <summary>
+    /// 按钮快照只保留纯数据（名称/类名/矩形/状态），不再持有 AutomationElement。
+    /// 之前缓存 250+ 个 UIA 元素，每个元素都是一个跨进程 RCW，2.5 次/秒地整批替换导致内存持续上涨。
+    /// </summary>
+    private sealed record ButtonInfo(string Name, string ClassName, Rect Bounds, bool IsEnabled, bool IsOffscreen);
 
     private List<(IntPtr Handle, Rect Bounds)>? _hostSnapshot;
     private DateTimeOffset _hostSnapshotAt;
 
     public string? TryGetSessionIdentity(IntPtr windowHandle)
     {
+        // 会话标识每轮都要用，但只在切会话时变化：缓存 2 秒，省掉大量 UIA 属性读取。
+        if (_sessionCacheKey is not null && DateTimeOffset.UtcNow - _sessionCacheAt < SessionCacheLifetime)
+            return _sessionCacheKey;
+
         try
         {
-            var root = AutomationElement.FromHandle(windowHandle);
+            var root = GetRoot(windowHandle);
             if (root is null) return null;
 
             var headerTitle = TryGetHeaderThreadTitle(root, GetButtonSnapshot(windowHandle, root));
             if (!string.IsNullOrWhiteSpace(headerTitle))
-                return $"{root.Current.ProcessId}:{headerTitle}";
+                return CacheSession($"{root.Current.ProcessId}:{headerTitle}");
 
             var documents = root.FindAll(
                 TreeScope.Descendants,
@@ -59,50 +83,44 @@ public sealed class WindowTracker
             }
 
             if (best is null || string.IsNullOrWhiteSpace(bestName)) return null;
-            return $"{best.Current.ProcessId}:{bestName}";
+            return CacheSession($"{best.Current.ProcessId}:{bestName}");
         }
         catch (ElementNotAvailableException) { return null; }
         catch (InvalidOperationException) { return null; }
         catch (COMException) { return null; }
     }
 
-    private static string? TryGetHeaderThreadTitle(AutomationElement root, IReadOnlyList<AutomationElement> buttons)
+    private static string? TryGetHeaderThreadTitle(AutomationElement root, IReadOnlyList<ButtonInfo> buttons)
     {
         try
         {
             var rootBounds = root.Current.BoundingRectangle;
             if (rootBounds.IsEmpty) return null;
 
-            AutomationElement? best = null;
+            ButtonInfo? best = null;
             var bestTop = double.MaxValue;
-            foreach (AutomationElement button in buttons)
+
+            foreach (var button in buttons)
             {
-                try
+                if (button.IsOffscreen || !button.IsEnabled) continue;
+                if (string.IsNullOrWhiteSpace(button.Name)) continue;
+                if (!button.ClassName.Contains("max-w-[320px]", StringComparison.OrdinalIgnoreCase)
+                    || !button.ClassName.Contains("truncate", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (button.Current.IsOffscreen || !button.Current.IsEnabled) continue;
-                    var name = button.Current.Name?.Trim();
-                    if (string.IsNullOrWhiteSpace(name)) continue;
-
-                    var className = button.Current.ClassName ?? string.Empty;
-                    if (!className.Contains("max-w-[320px]", StringComparison.OrdinalIgnoreCase)
-                        || !className.Contains("truncate", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var bounds = button.Current.BoundingRectangle;
-                    if (bounds.IsEmpty) continue;
-                    if (bounds.Top < rootBounds.Top || bounds.Top > rootBounds.Top + 130) continue;
-                    if (bounds.Left < rootBounds.Left + 380 || bounds.Left > rootBounds.Left + 1100) continue;
-
-                    if (bounds.Top >= bestTop) continue;
-                    best = button;
-                    bestTop = bounds.Top;
+                    continue;
                 }
-                catch (ElementNotAvailableException) { }
+
+                var bounds = button.Bounds;
+                if (bounds.IsEmpty) continue;
+                if (bounds.Top < rootBounds.Top || bounds.Top > rootBounds.Top + 130) continue;
+                if (bounds.Left < rootBounds.Left + 380 || bounds.Left > rootBounds.Left + 1100) continue;
+
+                if (bounds.Top >= bestTop) continue;
+                best = button;
+                bestTop = bounds.Top;
             }
 
-            return best?.Current.Name?.Trim();
+            return best?.Name;
         }
         catch (ElementNotAvailableException) { return null; }
         catch (InvalidOperationException) { return null; }
@@ -114,15 +132,22 @@ public sealed class WindowTracker
         {
             foreach (var host in FindHostWindows())
             {
-                var root = AutomationElement.FromHandle(host.Handle);
+                var root = GetRoot(host.Handle);
                 if (root is null) continue;
 
                 var buttons = GetButtonSnapshot(host.Handle, root);
                 var processId = root.Current.ProcessId;
-                var element = FindBestCandidate(root, host.Bounds, ControlType.Edit)
+                // 输入框元素在窗口内基本稳定：缓存 2 秒，避免每轮都做整棵树的 Edit/Document 扫描。
+                var element = TryGetCachedComposer(host.Handle);
+                if (element is null)
+                {
+                    element = FindBestCandidate(root, host.Bounds, ControlType.Edit)
                               ?? FindBestCandidate(root, host.Bounds, ControlType.Document)
                               ?? FindBestGlobalCandidate(host.Bounds, ControlType.Edit, processId)
                               ?? FindBestGlobalCandidate(host.Bounds, ControlType.Document, processId);
+
+                    if (element is not null) CacheComposer(host.Handle, element);
+                }
 
                 if (element is not null)
                 {
@@ -144,33 +169,89 @@ public sealed class WindowTracker
     {
         try
         {
-            var root = AutomationElement.FromHandle(windowHandle);
+            var root = GetRoot(windowHandle);
             if (root is null) return false;
 
             foreach (var button in GetButtonSnapshot(windowHandle, root))
             {
-                try
+                if (button.IsOffscreen) continue;
+
+                var name = button.Name;
+                if (name.Contains("停止回答", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("停止生成", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("stop generating", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "停止", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "stop", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (button.Current.IsOffscreen) continue;
-                    var name = button.Current.Name ?? string.Empty;
-                    if (name.Contains("停止回答", StringComparison.OrdinalIgnoreCase)
-                        || name.Contains("停止生成", StringComparison.OrdinalIgnoreCase)
-                        || name.Contains("stop generating", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(name.Trim(), "停止", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(name.Trim(), "stop", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
+                    return true;
                 }
-                catch (ElementNotAvailableException) { }
             }
         }
         catch (ElementNotAvailableException) { }
         catch (InvalidOperationException) { }
         catch (COMException) { }
+
         return false;
     }
 
+    private string CacheSession(string identity)
+    {
+        _sessionCacheKey = identity;
+        _sessionCacheAt = DateTimeOffset.UtcNow;
+        return identity;
+    }
+    private AutomationElement? TryGetCachedComposer(IntPtr windowHandle)
+    {
+        if (_composerCacheElement is null || _composerCacheHandle != windowHandle) return null;
+        if (DateTimeOffset.UtcNow - _composerCacheAt > ComposerCacheLifetime) return null;
+
+        try
+        {
+            var bounds = _composerCacheElement.Current.BoundingRectangle;
+            return bounds.IsEmpty ? null : _composerCacheElement;
+        }
+        catch (ElementNotAvailableException) { }
+        catch (InvalidOperationException) { }
+        catch (COMException) { }
+        return null;
+    }
+
+    private void CacheComposer(IntPtr windowHandle, AutomationElement element)
+    {
+        _composerCacheHandle = windowHandle;
+        _composerCacheElement = element;
+        _composerCacheAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>会话或窗口切换时让缓存的输入框元素失效。</summary>
+    public void InvalidateComposerCache()
+    {
+        _composerCacheElement = null;
+        _composerCacheHandle = IntPtr.Zero;
+    }
+    private AutomationElement? GetRoot(IntPtr windowHandle)
+    {
+        if (_rootSnapshot is not null
+            && _rootHandle == windowHandle
+            && DateTimeOffset.UtcNow - _rootSnapshotAt < RootSnapshotLifetime)
+        {
+            return _rootSnapshot;
+        }
+
+        try
+        {
+            var root = AutomationElement.FromHandle(windowHandle);
+            if (root is null) return null;
+
+            _rootHandle = windowHandle;
+            _rootSnapshot = root;
+            _rootSnapshotAt = DateTimeOffset.UtcNow;
+            return root;
+        }
+        catch (ElementNotAvailableException) { return null; }
+        catch (InvalidOperationException) { return null; }
+        catch (COMException) { return null; }
+    }
     private IReadOnlyList<(IntPtr Handle, Rect Bounds)> FindHostWindows()
     {
         if (_hostSnapshot is not null
@@ -192,7 +273,7 @@ public sealed class WindowTracker
         {
             foreach (var process in Process.GetProcessesByName(processName))
             {
-                // Process 持有原生进程句柄，必须释放，否则 350ms 轮询会持续泄漏句柄。
+                // Process 持有原生进程句柄，必须释放。
                 using (process)
                 {
                     try
@@ -217,36 +298,56 @@ public sealed class WindowTracker
         }
 
         var hosts = new List<(IntPtr Handle, Rect Bounds)>();
-        var desktop = AutomationElement.RootElement;
-        if (desktop is null || processIds.Count == 0)
-            return hosts;
+        if (processIds.Count == 0) return hosts;
 
-        var windows = desktop.FindAll(TreeScope.Children, System.Windows.Automation.Condition.TrueCondition);
-        var seen = new HashSet<IntPtr>();
-
-        foreach (AutomationElement window in windows)
+        // 用 Win32 枚举顶层窗口：比 desktop.FindAll(Children) 便宜得多，也不再产生上百个 UIA 元素。
+        EnumWindows((handle, _) =>
         {
             try
             {
-                if (!processIds.Contains(window.Current.ProcessId) || window.Current.IsOffscreen) continue;
+                GetWindowThreadProcessId(handle, out var processId);
+                if (!processIds.Contains((int)processId) || !IsWindowVisible(handle)) return true;
+                if (!GetWindowRect(handle, out var rect)) return true;
 
-                var handle = new IntPtr(window.Current.NativeWindowHandle);
-                if (handle == IntPtr.Zero || !seen.Add(handle)) continue;
+                var width = rect.Right - rect.Left;
+                var height = rect.Bottom - rect.Top;
+                if (width < 500 || height < 400) return true;
 
-                var bounds = window.Current.BoundingRectangle;
-                if (bounds.IsEmpty || bounds.Width < 500 || bounds.Height < 400) continue;
-
-                hosts.Add((handle, bounds));
+                hosts.Add((handle, new Rect(rect.Left, rect.Top, width, height)));
             }
-            catch (ElementNotAvailableException) { }
-        }
+            catch { }
+            return true;
+        }, IntPtr.Zero);
 
         return hosts.OrderByDescending(host => host.Bounds.Width * host.Bounds.Height).ToList();
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect32
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr handle, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr handle, out Rect32 rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr handle);
+
     // 头部标题、权限锚点、生成状态都要遍历 Button 集合，
     // 用一个很短的快照复用，避免同一轮刷新里重复遍历整棵元素树。
-    private List<AutomationElement> GetButtonSnapshot(IntPtr windowHandle, AutomationElement root)
+    private List<ButtonInfo> GetButtonSnapshot(IntPtr windowHandle, AutomationElement root)
     {
         if (_buttonSnapshot is not null
             && _buttonSnapshotHandle == windowHandle
@@ -255,15 +356,27 @@ public sealed class WindowTracker
             return _buttonSnapshot;
         }
 
-        var buttons = new List<AutomationElement>();
+        var buttons = new List<ButtonInfo>();
         try
         {
             var found = root.FindAll(
                 TreeScope.Descendants,
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
+
             foreach (AutomationElement button in found)
             {
-                buttons.Add(button);
+                try
+                {
+                    buttons.Add(new ButtonInfo(
+                        (button.Current.Name ?? string.Empty).Trim(),
+                        button.Current.ClassName ?? string.Empty,
+                        button.Current.BoundingRectangle,
+                        button.Current.IsEnabled,
+                        button.Current.IsOffscreen));
+                }
+                catch (ElementNotAvailableException) { }
+                catch (InvalidOperationException) { }
+                catch (COMException) { }
             }
         }
         catch (ElementNotAvailableException) { }
@@ -376,43 +489,32 @@ public sealed class WindowTracker
         return best;
     }
 
-    private static Rect? FindPermissionAnchor(Rect hostBounds, IReadOnlyList<AutomationElement> buttons)
+    private static Rect? FindPermissionAnchor(Rect hostBounds, IReadOnlyList<ButtonInfo> buttons)
     {
-        try
+        Rect? best = null;
+
+        foreach (var button in buttons)
         {
-            Rect? best = null;
-            foreach (AutomationElement button in buttons)
+            if (!button.IsEnabled || button.IsOffscreen) continue;
+            if (!button.Name.Contains("权限", StringComparison.OrdinalIgnoreCase)
+                && !button.Name.Contains("访问", StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    if (!button.Current.IsEnabled || button.Current.IsOffscreen) continue;
-                    var name = button.Current.Name ?? string.Empty;
-                    if (!name.Contains("权限", StringComparison.OrdinalIgnoreCase)
-                        && !name.Contains("访问", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var bounds = button.Current.BoundingRectangle;
-                    if (bounds.IsEmpty) continue;
-                    var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
-                    if (!hostBounds.Contains(center)) continue;
-                    if (bounds.Top < hostBounds.Top + hostBounds.Height * 0.55) continue;
-
-                    if (best is null || bounds.Left < best.Value.Left)
-                        best = bounds;
-                }
-                catch (ElementNotAvailableException) { }
+                continue;
             }
 
-            if (best is null) return null;
+            var bounds = button.Bounds;
+            if (bounds.IsEmpty) continue;
+            var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+            if (!hostBounds.Contains(center)) continue;
+            if (bounds.Top < hostBounds.Top + hostBounds.Height * 0.55) continue;
 
-            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, EnumerateButtonBounds(buttons));
+            if (best is null || bounds.Left < best.Value.Left)
+                best = bounds;
         }
-        catch (ElementNotAvailableException)
-        {
-            return null;
-        }
+
+        if (best is null) return null;
+
+        return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, buttons.Select(b => b.Bounds));
     }
 
     private static Rect? FindGlobalPermissionAnchor(Rect hostBounds, int processId)
@@ -427,6 +529,8 @@ public sealed class WindowTracker
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
 
             Rect? best = null;
+            var candidates = new List<Rect>();
+
             foreach (AutomationElement button in buttons)
             {
                 try
@@ -438,6 +542,9 @@ public sealed class WindowTracker
                         continue;
                     }
 
+                    var bounds = button.Current.BoundingRectangle;
+                    if (!bounds.IsEmpty) candidates.Add(bounds);
+
                     var name = button.Current.Name ?? string.Empty;
                     if (!name.Contains("权限", StringComparison.OrdinalIgnoreCase)
                         && !name.Contains("访问", StringComparison.OrdinalIgnoreCase))
@@ -445,7 +552,6 @@ public sealed class WindowTracker
                         continue;
                     }
 
-                    var bounds = button.Current.BoundingRectangle;
                     if (bounds.IsEmpty) continue;
                     var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
                     if (!hostBounds.Contains(center)) continue;
@@ -459,7 +565,7 @@ public sealed class WindowTracker
 
             if (best is null) return null;
 
-            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, EnumerateButtonBounds(buttons));
+            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, candidates);
         }
         catch (ElementNotAvailableException)
         {
@@ -467,23 +573,6 @@ public sealed class WindowTracker
         }
     }
 
-    private static IEnumerable<Rect> EnumerateButtonBounds(System.Collections.IEnumerable buttons)
-    {
-        foreach (AutomationElement button in buttons)
-        {
-            Rect bounds;
-            try
-            {
-                if (button.Current.IsOffscreen) continue;
-                bounds = button.Current.BoundingRectangle;
-            }
-            catch (ElementNotAvailableException) { continue; }
-            catch (InvalidOperationException) { continue; }
-            catch (COMException) { continue; }
-
-            yield return bounds;
-        }
-    }
 
     /// <summary>
     /// 输入框右下角的发送键。名称会随状态变化（发送 / 加入队列 / Send…），
@@ -494,13 +583,19 @@ public sealed class WindowTracker
         buttonName = string.Empty;
         try
         {
-            var root = AutomationElement.FromHandle(windowHandle);
+            var root = GetRoot(windowHandle);
             if (root is null) return null;
+
+            // 只有真的要发送时才做一次 FindAll：既能拿到可 Invoke 的元素，
+            // 又不会把 250+ 个 UIA 元素长期留在内存里（发送是低频操作）。
+            var found = root.FindAll(
+                TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button));
 
             AutomationElement? best = null;
             var bestLeft = double.MinValue;
 
-            foreach (var button in GetButtonSnapshot(windowHandle, root))
+            foreach (AutomationElement button in found)
             {
                 try
                 {
@@ -560,7 +655,7 @@ public sealed class WindowTracker
 
         try
         {
-            var root = AutomationElement.FromHandle(windowHandle);
+            var root = GetRoot(windowHandle);
             if (root is null) return false;
 
             var tailTop = composerBounds.Top - 620;
@@ -593,24 +688,16 @@ public sealed class WindowTracker
             // 备用信号：错误旁边出现「重试」按钮。
             foreach (var button in GetButtonSnapshot(windowHandle, root))
             {
-                try
-                {
-                    if (button.Current.IsOffscreen || !button.Current.IsEnabled) continue;
+                if (button.IsOffscreen || !button.IsEnabled) continue;
+                if (!IsRetryButtonName(button.Name)) continue;
 
-                    var name = (button.Current.Name ?? string.Empty).Trim();
-                    if (!IsRetryButtonName(name)) continue;
+                var bounds = button.Bounds;
+                if (bounds.IsEmpty) continue;
+                if (bounds.Bottom > composerBounds.Top + 4 || bounds.Bottom < tailTop) continue;
 
-                    var bounds = button.Current.BoundingRectangle;
-                    if (bounds.IsEmpty) continue;
-                    if (bounds.Bottom > composerBounds.Top + 4 || bounds.Bottom < tailTop) continue;
-
-                    signature = "retry-button";
-                    source = "retry-button";
-                    return true;
-                }
-                catch (ElementNotAvailableException) { }
-                catch (InvalidOperationException) { }
-                catch (COMException) { }
+                signature = "retry-button";
+                source = "retry-button";
+                return true;
             }
 
             return false;
