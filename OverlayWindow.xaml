@@ -84,15 +84,43 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="ItemBg"
-                                Margin="0,1"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="7"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter ContentSource="Header"
-                                              RecognizesAccessKey="True"
-                                              VerticalAlignment="Center" />
-                        </Border>
+                        <Grid>
+                            <Border x:Name="ItemBg"
+                                    Margin="0,1"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="7"
+                                    Padding="{TemplateBinding Padding}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="18" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="CheckMark" Grid.Column="0" Text="✓" FontSize="12" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="SubMenuArrow" Grid.Column="2" Text="▸" FontSize="12" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                   Placement="Right"
+                                   HorizontalOffset="4"
+                                   PopupAnimation="Fade">
+                                <Border Background="{DynamicResource MenuSurfaceBrush}"
+                                        BorderBrush="{DynamicResource MenuSubtleBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="11"
+                                        Padding="6"
+                                        MinWidth="176">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#161816" BlurRadius="18" ShadowDepth="4" Opacity="0.16" />
+                                    </Border.Effect>
+                                    <ItemsPresenter />
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="ItemBg" Property="Background" Value="{DynamicResource MenuHoverBrush}" />
@@ -102,6 +130,12 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubMenuArrow" Property="Visibility" Value="Visible" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -145,7 +179,6 @@
                 Click="OptimizeButton_OnClick">
             <Button.ContextMenu>
                 <ContextMenu StaysOpen="False" Opened="ContextMenu_OnOpened" Closed="ContextMenu_OnClosed">
-                    <MenuItem x:Name="TemplateMenuItem" Header="优化模板" />
                     <MenuItem x:Name="OptimizeModeMenuItem" Header="优化方式" />
                     <MenuItem Header="设置…" Click="SettingsMenuItem_OnClick" />
                     <MenuItem x:Name="RecentMenuItem" Header="最近发送 (0)" Click="RecentMenuItem_OnClick" />
