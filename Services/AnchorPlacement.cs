@@ -10,25 +10,41 @@ internal static class AnchorPlacement
     /// <summary>
     /// 权限芯片右侧还可能并排出现“目标”等同排芯片。锚点必须覆盖整段左侧工具组，
     /// 否则悬浮按钮会压在相邻芯片（例如“目标”）上。
-    /// 右侧的模型/听写/发送等控件位于窗口右半边，用中线切分即可排除。
+    ///
+    /// 判定方式用“相邻链”：从权限芯片右边界出发，只合并紧挨着当前右边界的同排芯片
+    /// （实测芯片间距约 23px @150%）。**不能用窗口中线**来切分左右控件——
+    /// 打开侧边文件栏后输入框整体左移，右侧的模型芯片会落进窗口左半边，
+    /// 锚点就会被带着穿过整个输入框，悬浮按钮随之压到听写/语音按钮上。
     /// </summary>
-    internal static Rect ExtendAcrossLeftCluster(Rect anchor, Rect hostBounds, IEnumerable<Rect> candidates)
+    internal static Rect ExtendAcrossLeftCluster(Rect anchor, IEnumerable<Rect> candidates)
     {
         if (anchor.IsEmpty) return anchor;
 
-        var clusterLimit = hostBounds.Left + hostBounds.Width * 0.5;
+        var maxGap = Math.Max(16, anchor.Height * 0.75);
         var right = anchor.Right;
+        var rowTop = anchor.Top;
+        var rowBottom = anchor.Bottom;
 
-        foreach (var bounds in candidates)
+        var changed = true;
+        while (changed)
         {
-            if (bounds.IsEmpty) continue;
-            if (bounds.Left >= clusterLimit) continue;
+            changed = false;
+            foreach (var bounds in candidates)
+            {
+                if (bounds.IsEmpty) continue;
 
-            // 必须与锚点处于同一行，避免把上方内容区的控件算进来。
-            if (bounds.Bottom < anchor.Top || bounds.Top > anchor.Bottom) continue;
-            if (bounds.Height > anchor.Height + 10) continue;
+                // 必须与锚点处于同一行，避免把上方内容区或其它行的控件算进来。
+                if (bounds.Bottom < rowTop || bounds.Top > rowBottom) continue;
+                if (bounds.Height > anchor.Height + 10) continue;
 
-            if (bounds.Right > right) right = bounds.Right;
+                // 只接受紧挨着当前右边界的芯片，远处控件（模型/听写/发送）自然被排除。
+                var gap = bounds.Left - right;
+                if (gap < -8 || gap > maxGap) continue;
+                if (bounds.Right <= right) continue;
+
+                right = bounds.Right;
+                changed = true;
+            }
         }
 
         return right > anchor.Right

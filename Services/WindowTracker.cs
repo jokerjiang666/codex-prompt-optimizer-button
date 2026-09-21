@@ -407,7 +407,7 @@ public sealed class WindowTracker
 
             if (best is null) return null;
 
-            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, hostBounds, EnumerateButtonBounds(buttons));
+            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, EnumerateButtonBounds(buttons));
         }
         catch (ElementNotAvailableException)
         {
@@ -459,7 +459,7 @@ public sealed class WindowTracker
 
             if (best is null) return null;
 
-            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, hostBounds, EnumerateButtonBounds(buttons));
+            return AnchorPlacement.ExtendAcrossLeftCluster(best.Value, EnumerateButtonBounds(buttons));
         }
         catch (ElementNotAvailableException)
         {
