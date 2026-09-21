@@ -3,12 +3,14 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using CodexInputEnhancer.Services;
 
 namespace CodexInputEnhancer;
 
 public partial class App : Application
 {
     private MainController? _controller;
+    private TrayIcon? _trayIcon;
 
     public App()
     {
@@ -25,13 +27,37 @@ public partial class App : Application
         WriteDiagnostic($"process=start pid={Environment.ProcessId}");
         _controller = new MainController(Dispatcher);
         _controller.Start();
+        try
+        {
+            _trayIcon = new TrayIcon();
+            _trayIcon.OpenSettingsRequested += (_, _) => _controller?.OpenSettings();
+            _trayIcon.ExitRequested += (_, _) => RequestExit();
+            _trayIcon.ShowStartupHint();
+            WriteDiagnostic("tray=ready");
+        }
+        catch (Exception ex)
+        {
+            WriteDiagnostic($"tray=failed type={ex.GetType().Name}");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         WriteDiagnostic($"process=exit code={e.ApplicationExitCode}");
+
+        try { _trayIcon?.Dispose(); } catch { }
         _controller?.Dispose();
         base.OnExit(e);
+
+        // 托盘图标/后台任务都可能拖住进程；退出即确保进程结束。
+        Environment.Exit(e.ApplicationExitCode);
+    }
+
+    /// <summary>统一退出入口（托盘菜单、右键菜单都走这里）。</summary>
+    internal static void RequestExit()
+    {
+        WriteDiagnostic("exit=requested");
+        Current?.Shutdown();
     }
 
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)

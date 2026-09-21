@@ -1,0 +1,31 @@
+﻿<Window x:Class="CodexInputEnhancer.VariablePromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="填写模板变量" Width="540" Height="520"
+        WindowStartupLocation="CenterScreen"
+        Background="White" Foreground="#1D1F1E" FontFamily="Microsoft YaHei UI"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        Icon="Assets/CodexInputEnhancer.ico"
+        KeyDown="Window_OnKeyDown">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="填写模板变量" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="当前模板里有 {{变量}} 占位符，填写后再执行优化。留空表示按空值替换。" Margin="0,6,0,0" FontSize="12.5" Foreground="#6E736F" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" Margin="0,16,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="FieldPanel" />
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="CancelButton" Content="取消" MinWidth="96" Height="34" Margin="0,0,10,0" Click="CancelButton_OnClick" />
+            <Button x:Name="OkButton" Content="开始优化" MinWidth="110" Height="34" Background="#1B1E1C" Foreground="White" Click="OkButton_OnClick" />
+        </StackPanel>
+    </Grid>
+</Window>

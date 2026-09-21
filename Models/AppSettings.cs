@@ -37,4 +37,23 @@ public sealed class AppSettings
     /// <summary>是否在悬浮窗显示「继续」按钮。</summary>
     public bool ShowContinueButton { get; set; } = true;
     public string OptimizationPrompt { get; set; } = DefaultOptimizationPrompt;
+    /// <summary>优化模板库（内置 + 自定义）。</summary>
+    public List<OptimizationTemplate> Templates { get; set; } = new();
+
+    /// <summary>当前选中的模板 Id。</summary>
+    public string ActiveTemplateId { get; set; } = "builtin-basic";
+
+    /// <summary>深度优化（多轮迭代）。</summary>
+    public bool DeepOptimizeEnabled { get; set; }
+
+    public int DeepOptimizeRounds { get; set; } = 2;
+
+    /// <summary>替换草稿前先弹优化结果预览。</summary>
+    public bool PreviewBeforeApply { get; set; } = true;
+
+    /// <summary>模板语言：zh / en。</summary>
+    public string TemplateLanguage { get; set; } = "zh";
+
+    /// <summary>配置面板风格：A（外壳）/ D（模板页）等。</summary>
+    public string SettingsStyle { get; set; } = "A";
 }

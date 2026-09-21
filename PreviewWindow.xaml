@@ -1,0 +1,88 @@
+﻿<Window x:Class="CodexInputEnhancer.PreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="优化结果预览" Width="1000" Height="660"
+        WindowStartupLocation="CenterScreen"
+        Background="White" Foreground="#1D1F1E" FontFamily="Microsoft YaHei UI"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        Icon="Assets/CodexInputEnhancer.ico"
+        KeyDown="Window_OnKeyDown">
+    <Window.Resources>
+        <Style x:Key="PreviewButton" TargetType="Button">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Background" Value="#F4F5F3" />
+            <Setter Property="Foreground" Value="#1D1F1E" />
+            <Setter Property="BorderBrush" Value="#E1E4E0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <DataTemplate x:Key="DiffLineTemplate">
+            <Border x:Name="Row" CornerRadius="4" Padding="6,3" Margin="0,1" MinHeight="20">
+                <TextBlock x:Name="Line" Text="{Binding Text}" TextWrapping="Wrap" FontSize="13" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Added">
+                    <Setter TargetName="Row" Property="Background" Value="#E7F6EC" />
+                    <Setter TargetName="Line" Property="Foreground" Value="#1F6B3B" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                    <Setter TargetName="Row" Property="Background" Value="#FCE9E7" />
+                    <Setter TargetName="Line" Property="Foreground" Value="#8A3A32" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="优化结果预览" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock x:Name="MetaText" Margin="0,6,0,0" FontSize="12.5" Foreground="#6E736F" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="原文" FontSize="13" FontWeight="SemiBold" Foreground="#6E736F" Margin="2,0,0,6" />
+                <Border BorderBrush="#E1E4E0" BorderThickness="1" CornerRadius="10" Background="#FBFCFA">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                        <ItemsControl x:Name="OriginalList" ItemTemplate="{StaticResource DiffLineTemplate}" />
+                    </ScrollViewer>
+                </Border>
+            </DockPanel>
+
+            <DockPanel Grid.Column="2">
+                <TextBlock DockPanel.Dock="Top" Text="优化后" FontSize="13" FontWeight="SemiBold" Foreground="#2F6FEB" Margin="2,0,0,6" />
+                <Border BorderBrush="#E1E4E0" BorderThickness="1" CornerRadius="10" Background="#FBFCFA">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                        <ItemsControl x:Name="UpdatedList" ItemTemplate="{StaticResource DiffLineTemplate}" />
+                    </ScrollViewer>
+                </Border>
+            </DockPanel>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="绿=新增内容　红=被改写内容　·　Esc 保留原文" FontSize="12" Foreground="#8A908B" VerticalAlignment="Center" />
+                <TextBlock x:Name="CopyStatus" Margin="12,0,0,0" FontSize="12" Foreground="#2F6FEB" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CopyButton" Content="复制结果" MinWidth="96" Margin="0,0,10,0" Style="{StaticResource PreviewButton}" Click="CopyButton_OnClick" />
+                <Button x:Name="RewriteButton" Content="再优化一轮" MinWidth="110" Margin="0,0,10,0" Style="{StaticResource PreviewButton}" Click="RewriteButton_OnClick" />
+                <Button x:Name="KeepButton" Content="保留原文" MinWidth="96" Margin="0,0,10,0" Style="{StaticResource PreviewButton}" Click="KeepButton_OnClick" />
+                <Button x:Name="ApplyButton" Content="应用替换" MinWidth="110" Style="{StaticResource PreviewButton}" Background="#1B1E1C" Foreground="White" BorderBrush="#1B1E1C" Click="ApplyButton_OnClick" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

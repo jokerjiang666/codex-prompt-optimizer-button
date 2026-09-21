@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +17,7 @@ public sealed class OpenAiCompatibleProvider : IOptimizerProvider
         _apiKey = apiKey;
     }
 
-    public async Task<string> OptimizeAsync(string text, CancellationToken cancellationToken)
+    public async Task<string> OptimizeAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_settings.ApiBaseUrl))
             throw new InvalidOperationException("请先配置 API Base URL。");
@@ -27,9 +27,9 @@ public sealed class OpenAiCompatibleProvider : IOptimizerProvider
             throw new InvalidOperationException("请先配置 API Key。");
 
         var endpoint = BuildEndpoint(_settings.ApiBaseUrl);
-        var prompt = string.IsNullOrWhiteSpace(_settings.OptimizationPrompt)
+        var prompt = string.IsNullOrWhiteSpace(systemPrompt)
             ? AppSettings.DefaultOptimizationPrompt
-            : _settings.OptimizationPrompt.Trim();
+            : systemPrompt.Trim();
 
         using var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
@@ -39,8 +39,8 @@ public sealed class OpenAiCompatibleProvider : IOptimizerProvider
 
         var useResponses = endpoint.EndsWith("/responses", StringComparison.OrdinalIgnoreCase);
         object body = useResponses
-            ? BuildResponsesBody(prompt, text)
-            : BuildChatBody(prompt, text);
+            ? BuildResponsesBody(prompt, userPrompt)
+            : BuildChatBody(prompt, userPrompt);
 
         using var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
         using var response = await client.PostAsync(endpoint, content, linked.Token);

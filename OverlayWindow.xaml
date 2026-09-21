@@ -145,6 +145,7 @@
                 Click="OptimizeButton_OnClick">
             <Button.ContextMenu>
                 <ContextMenu StaysOpen="False" Opened="ContextMenu_OnOpened" Closed="ContextMenu_OnClosed">
+                    <MenuItem x:Name="TemplateMenuItem" Header="优化模板" />
                     <MenuItem Header="设置…" Click="SettingsMenuItem_OnClick" />
                     <MenuItem x:Name="RecentMenuItem" Header="最近发送 (0)" Click="RecentMenuItem_OnClick" />
                     <MenuItem Header="清空最近记录" Click="ClearRecentMenuItem_OnClick" />

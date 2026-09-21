@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using CodexInputEnhancer.Models;
 
@@ -17,6 +17,7 @@ public sealed class SettingsStore
         if (!File.Exists(SettingsPath))
         {
             var created = new AppSettings();
+            TemplateLibrary.Ensure(created);
             Save(created);
             return created;
         }
@@ -38,12 +39,15 @@ public sealed class SettingsStore
                 changed = true;
             }
 
+            if (TemplateLibrary.Ensure(settings)) changed = true;
+
             if (changed) Save(settings);
             return settings;
         }
         catch
         {
             var fallback = new AppSettings();
+            TemplateLibrary.Ensure(fallback);
             Save(fallback);
             return fallback;
         }

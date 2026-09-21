@@ -1,4 +1,4 @@
-# Codex Prompt Optimizer Button
+﻿# Codex Prompt Optimizer Button
 
 > A Windows input enhancer for Codex Desktop. It adds a star button next to the Codex composer. Click it to send the current draft to the local Codex CLI or an OpenAI-compatible API and replace it with a clearer, execution-ready prompt.
 
@@ -15,6 +15,11 @@
 - Shows the overlay only when Codex is in the foreground.
 - Adds a "Continue" button: when the composer is empty, it writes your configured continue text (default `继续`) and sends it. The button can be hidden in Settings.
 - Optional auto-continue on interruption (off by default): when an interruption/error such as `429 Too Many Requests` is detected, it sends the configured text automatically. Interval defaults to 10 seconds, with no attempt cap.
+- **Template library**: eight built-in templates (basic, task breakdown, bug repro, code review, refactor, docs, image prompt, video prompt) plus custom templates and JSON import/export (Settings -> Templates).
+- **Deep optimize**: one or two extra iteration rounds on top of the first result (off by default).
+- **Preview before apply**: a side-by-side diff window with Apply / Keep original / Rewrite once more / Copy (on by default; Esc keeps the original).
+- **Template variables**: `{{name}}` placeholders prompt you for values before optimizing.
+- **Tray icon**: visible in the taskbar notification area with Open settings / Exit; exiting now terminates the process.
 
 ## Requirements
 
@@ -42,7 +47,7 @@ Get the latest build from Releases:
 
 ## Configuration
 
-- Uses the local Codex CLI by default.
+- Uses the local Codex CLI by default; it loads your own `~/.codex/config.toml` provider and model, so the enhancer follows the Codex app configuration.
 - Switch to an OpenAI-compatible API in Settings.
 - API keys are encrypted with Windows DPAPI for the current user; they are never written to `settings.json` or logs.
 - `data/settings.json` is created automatically on first launch.

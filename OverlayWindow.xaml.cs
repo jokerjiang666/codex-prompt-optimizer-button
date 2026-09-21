@@ -284,7 +284,7 @@ public partial class OverlayWindow : Window
     private void ExitMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
         App.WriteDiagnostic("exit=menu-command");
-        Application.Current.Shutdown();
+        App.RequestExit();
     }
 
     private void ContextMenu_OnOpened(object sender, RoutedEventArgs e)
@@ -337,21 +337,37 @@ public partial class OverlayWindow : Window
 
         try
         {
-            if (PresentationSource.FromVisual(_openContextMenu) is not HwndSource source
-                || source.Handle == IntPtr.Zero)
+            if (IsPointInsideHandle(point, PresentationSource.FromVisual(_openContextMenu) as HwndSource)) return true;
+
+            // 子菜单是独立弹窗，点击时也要算「菜单内部」，否则会被低层鼠标钩子误判成外部点击。
+            foreach (var item in _openContextMenu.Items.OfType<MenuItem>())
             {
-                return false;
+                if (!item.IsSubmenuOpen) continue;
+                if (IsPointInsideHandle(point, PresentationSource.FromVisual(item) as HwndSource)) return true;
+
+                foreach (var nested in item.Items.OfType<MenuItem>())
+                {
+                    if (!nested.IsSubmenuOpen) continue;
+                    if (IsPointInsideHandle(point, PresentationSource.FromVisual(nested) as HwndSource)) return true;
+                }
             }
 
-            var handle = WindowFromPoint(point);
-            if (handle == IntPtr.Zero) return false;
-
-            return GetAncestor(handle, GaRoot) == source.Handle;
+            return false;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool IsPointInsideHandle(Point32 point, HwndSource? source)
+    {
+        if (source is null || source.Handle == IntPtr.Zero) return false;
+
+        var handle = WindowFromPoint(point);
+        if (handle == IntPtr.Zero) return false;
+
+        return GetAncestor(handle, GaRoot) == source.Handle;
     }
 
     private void ApplyTheme()

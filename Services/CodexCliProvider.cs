@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using CodexInputEnhancer.Models;
@@ -10,7 +10,6 @@ public sealed class CodexCliProvider : IOptimizerProvider
     private readonly string _codexExe;
     private readonly string _model;
     private readonly string _reasoningEffort;
-    private readonly string _optimizationPrompt;
 
     public CodexCliProvider(AppSettings settings)
     {
@@ -20,12 +19,9 @@ public sealed class CodexCliProvider : IOptimizerProvider
         _reasoningEffort = string.IsNullOrWhiteSpace(settings.ReasoningEffort)
             ? "low"
             : settings.ReasoningEffort.Trim();
-        _optimizationPrompt = string.IsNullOrWhiteSpace(settings.OptimizationPrompt)
-            ? AppSettings.DefaultOptimizationPrompt
-            : settings.OptimizationPrompt.Trim();
     }
 
-    public async Task<string> OptimizeAsync(string text, CancellationToken cancellationToken)
+    public async Task<string> OptimizeAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
     {
         var tempRoot = Path.Combine(AppContext.BaseDirectory, "temp");
         Directory.CreateDirectory(tempRoot);
@@ -51,7 +47,7 @@ public sealed class CodexCliProvider : IOptimizerProvider
                 catch { }
             });
 
-            await process.StandardInput.WriteAsync(BuildPrompt(text));
+            await process.StandardInput.WriteAsync(BuildPrompt(systemPrompt, userPrompt));
             process.StandardInput.Close();
 
             var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
@@ -111,7 +107,6 @@ public sealed class CodexCliProvider : IOptimizerProvider
         info.ArgumentList.Add("exec");
         info.ArgumentList.Add("--skip-git-repo-check");
         info.ArgumentList.Add("--ephemeral");
-        info.ArgumentList.Add("--ignore-user-config");
         info.ArgumentList.Add("--ignore-rules");
         info.ArgumentList.Add("-s");
         info.ArgumentList.Add("read-only");
@@ -123,7 +118,13 @@ public sealed class CodexCliProvider : IOptimizerProvider
         return info;
     }
 
-    private string BuildPrompt(string text) => $"{_optimizationPrompt}\n\n用户原始输入：\n{text}";
+    private static string BuildPrompt(string systemPrompt, string userPrompt)
+    {
+        var system = string.IsNullOrWhiteSpace(systemPrompt)
+            ? AppSettings.DefaultOptimizationPrompt
+            : systemPrompt.Trim();
+        return $"{system}{Environment.NewLine}{Environment.NewLine}{userPrompt}";
+    }
 
     private static string? FindNativeCodexExecutable()
     {

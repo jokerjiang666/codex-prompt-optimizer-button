@@ -1,4 +1,6 @@
-using System.IO;
+﻿using System.IO;
+using System.Text;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,6 +15,10 @@ public partial class SettingsWindow : Window
     private readonly SettingsStore _settingsStore;
     private readonly SecretStore _secretStore;
     private readonly RecentHistoryStore _recentHistoryStore;
+    private List<OptimizationTemplate> _templates = new();
+    private string _activeTemplateId = "builtin-basic";
+    private bool _loadingTemplates;
+    private AppSettings? _loadedSettings;
 
     public event Action<AppSettings>? SettingsSaved;
     public event Action<string>? RestoreRecentRequested;
@@ -55,6 +61,15 @@ public partial class SettingsWindow : Window
         AutoContinueToggle.IsChecked = settings.AutoContinueEnabled;
         AutoContinueTextBox.Text = string.IsNullOrWhiteSpace(settings.AutoContinueText) ? "继续" : settings.AutoContinueText;
         AutoContinueIntervalBox.Text = Math.Clamp(settings.AutoContinueMinIntervalSeconds, 3, 600).ToString();
+        _loadedSettings = settings;
+        TemplateLibrary.Ensure(settings);
+        _templates = settings.Templates.Select(TemplateLibrary.Clone).ToList();
+        _activeTemplateId = settings.ActiveTemplateId;
+        RefreshTemplateList(_templates.FirstOrDefault(t => string.Equals(t.Id, _activeTemplateId, StringComparison.Ordinal)) ?? _templates.FirstOrDefault());
+
+        DeepOptimizeToggle.IsChecked = settings.DeepOptimizeEnabled;
+        DeepOptimizeRoundsBox.Text = Math.Clamp(settings.DeepOptimizeRounds, 1, 3).ToString();
+        PreviewBeforeApplyToggle.IsChecked = settings.PreviewBeforeApply;
         SelectReasoning(settings.ReasoningEffort);
         UpdateApiFields();
     }
@@ -66,7 +81,13 @@ public partial class SettingsWindow : Window
         Model = ModelBox.Text.Trim(),
         ReasoningEffort = SelectedReasoning(),
         TimeoutSeconds = 60,
-        HistoryEnabled = HistoryEnabledCheckBox.IsChecked != false,
+        Templates = _templates.Select(TemplateLibrary.Clone).ToList(),
+        ActiveTemplateId = _activeTemplateId,
+        DeepOptimizeEnabled = DeepOptimizeToggle.IsChecked == true,
+        DeepOptimizeRounds = ParseRounds(DeepOptimizeRoundsBox.Text),
+        PreviewBeforeApply = PreviewBeforeApplyToggle.IsChecked != false,
+        TemplateLanguage = _loadedSettings?.TemplateLanguage ?? "zh",
+        SettingsStyle = _loadedSettings?.SettingsStyle ?? "A",        HistoryEnabled = HistoryEnabledCheckBox.IsChecked != false,
         ShowContinueButton = ShowContinueToggle.IsChecked != false,
         AutoContinueEnabled = AutoContinueToggle.IsChecked == true,
         AutoContinueText = string.IsNullOrWhiteSpace(AutoContinueTextBox.Text) ? "继续" : AutoContinueTextBox.Text.Trim(),
@@ -162,7 +183,10 @@ public partial class SettingsWindow : Window
             var settings = ReadForm();
             var provider = OptimizerProviderFactory.Create(settings, ApiKeyBox.Password);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.TimeoutSeconds, 5, 300)));
-            _ = await provider.OptimizeAsync("请将“测试连接”改写得更清晰。", timeout.Token);
+            _ = await provider.OptimizeAsync(
+                "你是连接测试助手。只输出改写后的文本，不要解释。",
+                "请将“测试连接”改写得更清晰。",
+                timeout.Token);
             TestStatusText.Text = "连接成功";
         }
         catch (OperationCanceledException)
@@ -223,12 +247,157 @@ public partial class SettingsWindow : Window
     private void BehaviorNavButton_OnClick(object sender, RoutedEventArgs e) => ShowPanel(BehaviorPanel, BehaviorNavButton);
     private void AboutNavButton_OnClick(object sender, RoutedEventArgs e) => ShowPanel(AboutPanel, AboutNavButton);
 
+    private void TemplateNavButton_OnClick(object sender, RoutedEventArgs e) => ShowPanel(TemplatePanel, TemplateNavButton);
+
+    private void TemplateList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingTemplates) return;
+        UpdateTemplateHeader();
+    }
+
+    private void RefreshTemplateList(OptimizationTemplate? select)
+    {
+        _loadingTemplates = true;
+        TemplateList.ItemsSource = null;
+        TemplateList.ItemsSource = _templates;
+        TemplateList.SelectedItem = select;
+        _loadingTemplates = false;
+        UpdateTemplateHeader();
+    }
+
+    private void UpdateTemplateHeader()
+    {
+        if (TemplateCurrentText is null) return;
+        var active = _templates.FirstOrDefault(t => string.Equals(t.Id, _activeTemplateId, StringComparison.Ordinal));
+        TemplateCurrentText.Text = $"当前模板：{active?.Name ?? "—"}";
+    }
+
+    private void NewTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var template = new OptimizationTemplate
+        {
+            Id = NewTemplateId(),
+            Name = "新模板",
+            Description = "自定义模板",
+            Category = "自定义",
+            SystemPrompt = AppSettings.DefaultOptimizationPrompt,
+            UserTemplate = PromptComposer.DefaultUserTemplate,
+            IsBuiltin = false,
+            Language = "zh"
+        };
+        _templates.Add(template);
+        RefreshTemplateList(template);
+    }
+
+    private void DuplicateTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (TemplateList.SelectedItem is not OptimizationTemplate source) return;
+        var copy = TemplateLibrary.Clone(source);
+        copy.Id = NewTemplateId();
+        copy.Name = source.Name + " 副本";
+        copy.IsBuiltin = false;
+        _templates.Add(copy);
+        RefreshTemplateList(copy);
+    }
+
+    private void DeleteTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (TemplateList.SelectedItem is not OptimizationTemplate selected) return;
+        if (selected.IsBuiltin)
+        {
+            MessageBox.Show(this, "内置模板不能删除。可以先「复制」一份，再改副本。", "Codex Input Enhancer", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show(this, $"确定删除模板「{selected.Name}」？", "Codex Input Enhancer", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+        _templates.Remove(selected);
+        if (string.Equals(_activeTemplateId, selected.Id, StringComparison.Ordinal))
+            _activeTemplateId = _templates.FirstOrDefault()?.Id ?? "builtin-basic";
+
+        RefreshTemplateList(_templates.FirstOrDefault(t => string.Equals(t.Id, _activeTemplateId, StringComparison.Ordinal)) ?? _templates.FirstOrDefault());
+    }
+
+    private void UseTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (TemplateList.SelectedItem is not OptimizationTemplate selected) return;
+        _activeTemplateId = selected.Id;
+        UpdateTemplateHeader();
+        SaveStatusText.Text = $"已设为当前模板：{selected.Name}（点保存后生效）";
+    }
+
+    private void ImportTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "导入优化模板",
+            Filter = "JSON 模板 (*.json)|*.json|所有文件 (*.*)|*.*"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var imported = TemplateTransfer.Import(File.ReadAllText(dialog.FileName));
+            var last = (OptimizationTemplate?)null;
+            foreach (var template in imported)
+            {
+                if (_templates.Any(t => string.Equals(t.Id, template.Id, StringComparison.Ordinal)))
+                    template.Id = NewTemplateId();
+                _templates.Add(template);
+                last = template;
+            }
+
+            RefreshTemplateList(last);
+            SaveStatusText.Text = $"已导入 {imported.Count} 个模板";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "导入失败：" + ex.Message, "Codex Input Enhancer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ExportTemplateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (TemplateList.SelectedItem is not OptimizationTemplate selected) return;
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出优化模板",
+            FileName = SanitizeFileName(selected.Name) + ".json",
+            Filter = "JSON 模板 (*.json)|*.json"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, TemplateTransfer.Export(selected), new UTF8Encoding(false));
+            SaveStatusText.Text = $"已导出模板：{selected.Name}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "导出失败：" + ex.Message, "Codex Input Enhancer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static string NewTemplateId() => "custom-" + Guid.NewGuid().ToString("N")[..8];
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "template" : cleaned;
+    }
+
+    private static int ParseRounds(string? text)
+    {
+        if (!int.TryParse((text ?? string.Empty).Trim(), out var rounds)) return 2;
+        return Math.Clamp(rounds, 1, 3);
+    }
+
     private void ShowPanel(UIElement panel, Button navButton)
     {
-        foreach (var candidate in new UIElement[] { AiPanel, RecentPanel, LogPanel, BehaviorPanel, AboutPanel })
+        foreach (var candidate in new UIElement[] { TemplatePanel, AiPanel, RecentPanel, LogPanel, BehaviorPanel, AboutPanel })
             candidate.Visibility = ReferenceEquals(candidate, panel) ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var button in new[] { AiNavButton, RecentNavButton, LogNavButton, BehaviorNavButton, AboutNavButton })
+        foreach (var button in new[] { TemplateNavButton, AiNavButton, RecentNavButton, LogNavButton, BehaviorNavButton, AboutNavButton })
         {
             button.Background = ReferenceEquals(button, navButton)
                 ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(232, 235, 231))
