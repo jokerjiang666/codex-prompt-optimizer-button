@@ -48,6 +48,7 @@ public sealed class MainController : IDisposable
         _optimizer = OptimizerProviderFactory.Create(_settings, _secretStore.Read());
 
         _overlay.ContinueRequested += OnContinueRequested;
+        _overlay.OptimizeWithTemplateRequested += OnOptimizeWithTemplateRequested;
         _overlay.OptimizeRequested += OnOptimizeRequested;
         _overlay.UndoRequested += OnUndoRequested;
         _overlay.CancelRequested += OnCancelRequested;
@@ -56,6 +57,7 @@ public sealed class MainController : IDisposable
         _overlay.ClearRecentRequested += OnClearRecentRequested;
         _overlay.SetRecentCount(_recentHistoryStore.Load().Count);
         _overlay.SetContinueVisible(_settings.ShowContinueButton, animate: false);
+        RefreshOptimizeModes();
     }
 
     public void Start()
@@ -265,7 +267,24 @@ public sealed class MainController : IDisposable
         _lastGenerationInProgress = generationInProgress;
     }
 
-    private async void OnOptimizeRequested(object? sender, EventArgs e)
+    private async void OnOptimizeRequested(object? sender, EventArgs e) => await OptimizeAsync(null);
+
+    /// <summary>右键「优化方式」里选中某个模板：设为当前模板并立刻用它优化。</summary>
+    private async void OnOptimizeWithTemplateRequested(object? sender, string templateId)
+    {
+        var template = TemplateLibrary.Find(_settings, templateId);
+        if (template is null) return;
+
+        _settings.ActiveTemplateId = template.Id;
+        _settingsStore.Save(_settings);
+        RefreshOptimizeModes();
+        WriteDiagnostic($"template=use-now id={template.Id}");
+
+        await OptimizeAsync(template.Id);
+    }
+
+    /// <summary>优化主流程；templateId 非空时使用指定模板。</summary>
+    private async Task OptimizeAsync(string? templateId)
     {
         if (_busy) return;
 
@@ -285,7 +304,7 @@ public sealed class MainController : IDisposable
             return;
         }
 
-        var template = TemplateLibrary.Resolve(_settings);
+        var template = TemplateLibrary.Find(_settings, templateId) ?? TemplateLibrary.Resolve(_settings);
 
         IReadOnlyDictionary<string, string>? variables = null;
         var placeholders = PromptVariables.FindPlaceholders(template);
@@ -433,6 +452,14 @@ public sealed class MainController : IDisposable
     }
 
     /// <summary>深度优化：在第一次结果上再迭代 1–2 轮。</summary>
+    private void RefreshOptimizeModes()
+    {
+        var templates = (_settings.Templates ?? new List<OptimizationTemplate>())
+            .Select(t => (t.Id, t.Name))
+            .ToList();
+        _overlay.SetOptimizeModes(templates, _settings.ActiveTemplateId);
+    }
+
     /// <summary>应用前预览：左右对比 + 应用/保留/再优化。</summary>
     private PreviewChoice ShowOptimizePreview(OptimizationTemplate? template, string original, string updated)
     {
@@ -638,6 +665,7 @@ public sealed class MainController : IDisposable
         _settings = settings;
         _optimizer = OptimizerProviderFactory.Create(_settings, _secretStore.Read());
         _overlay.SetContinueVisible(_settings.ShowContinueButton, animate: false);
+        RefreshOptimizeModes();
         WriteDiagnostic($"settings=saved provider={_settings.Provider} model={_settings.Model}");
     }
 

@@ -69,6 +69,7 @@ public partial class OverlayWindow : Window
     [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
 
+    public event EventHandler<string>? OptimizeWithTemplateRequested;
     public event EventHandler? OptimizeRequested;
     public event EventHandler? ContinueRequested;
     public event EventHandler? UndoRequested;
@@ -256,6 +257,42 @@ public partial class OverlayWindow : Window
         else OptimizeRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// 重建右键菜单「优化方式」子菜单：悬停即展开，点某个模板立刻用它优化当前草稿。
+    /// </summary>
+    public void SetOptimizeModes(IReadOnlyList<(string Id, string Name)> templates, string? activeId)
+    {
+        OptimizeModeMenuItem.Items.Clear();
+
+        if (templates.Count == 0)
+        {
+            OptimizeModeMenuItem.Items.Add(new MenuItem { Header = "（暂无模板）", IsEnabled = false });
+            return;
+        }
+
+        foreach (var (id, name) in templates)
+        {
+            var item = new MenuItem
+            {
+                Header = name,
+                IsCheckable = true,
+                IsChecked = string.Equals(id, activeId, StringComparison.Ordinal),
+                Tag = id
+            };
+            item.Click += (sender, _) =>
+            {
+                if (sender is MenuItem { Tag: string templateId })
+                    OptimizeWithTemplateRequested?.Invoke(this, templateId);
+            };
+            OptimizeModeMenuItem.Items.Add(item);
+        }
+
+        OptimizeModeMenuItem.Items.Add(new Separator());
+
+        var manage = new MenuItem { Header = "管理模板…" };
+        manage.Click += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+        OptimizeModeMenuItem.Items.Add(manage);
+    }
     private void SettingsMenuItem_OnClick(object sender, RoutedEventArgs e) =>
         SettingsRequested?.Invoke(this, EventArgs.Empty);
 
