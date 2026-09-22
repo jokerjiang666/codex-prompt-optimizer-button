@@ -62,6 +62,9 @@ Get the latest build from Releases:
 - `runtime-status.log` records connection/window state and error types only, never input content.
 - In API mode, input content is sent to the endpoint you configure.
 - Auto-continue matches error patterns against conversation text locally; only status and error signatures are logged, never conversation content.
+- Context enhancement is disabled by default; when disabled, no local session files are read and no git commands are run.
+- When enabled, it reads recent conversation summaries from local Codex session logs, workspace paths, and git summaries only at optimize time, and sends them with the request to your configured model provider; collection is strictly read-only and never writes to Codex state.
+- `runtime-status.log` only records status codes and counts, never the context body.
 
 ## Build from Source
 

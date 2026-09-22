@@ -70,6 +70,14 @@ public partial class SettingsWindow : Window
         DeepOptimizeToggle.IsChecked = settings.DeepOptimizeEnabled;
         DeepOptimizeRoundsBox.Text = Math.Clamp(settings.DeepOptimizeRounds, 1, 3).ToString();
         PreviewBeforeApplyToggle.IsChecked = settings.PreviewBeforeApply;
+        ContextEnabledToggle.IsChecked = settings.ContextEnabled;
+        ContextThreadTailCheck.IsChecked = settings.ContextThreadTailEnabled;
+        ContextGitCheck.IsChecked = settings.ContextGitEnabled;
+        ContextWorkspaceMetaCheck.IsChecked = settings.ContextWorkspaceMetaEnabled;
+        ContextTokenBudgetBox.Text = Math.Clamp(settings.ContextTokenBudget, 200, 4000).ToString();
+        ContextMessageLimitBox.Text = Math.Clamp(settings.ContextMessageLimit, 0, 20).ToString();
+        ContextStaleSecondsBox.Text = Math.Clamp(settings.ContextStaleSeconds, 30, 3600).ToString();
+        UpdateContextControlsEnabled();
         SelectReasoning(settings.ReasoningEffort);
         UpdateApiFields();
     }
@@ -86,8 +94,17 @@ public partial class SettingsWindow : Window
         DeepOptimizeEnabled = DeepOptimizeToggle.IsChecked == true,
         DeepOptimizeRounds = ParseRounds(DeepOptimizeRoundsBox.Text),
         PreviewBeforeApply = PreviewBeforeApplyToggle.IsChecked != false,
+        ContextEnabled = ContextEnabledToggle.IsChecked == true,
+        ContextThreadTailEnabled = ContextThreadTailCheck.IsChecked == true,
+        ContextGitEnabled = ContextGitCheck.IsChecked == true,
+        ContextWorkspaceMetaEnabled = ContextWorkspaceMetaCheck.IsChecked == true,
+        ContextTokenBudget = ParseContextBudget(ContextTokenBudgetBox.Text),
+        ContextMessageLimit = ParseContextMessageLimit(ContextMessageLimitBox.Text),
+        ContextStaleSeconds = ParseContextStaleSeconds(ContextStaleSecondsBox.Text),
+        ContextShowInPreview = _loadedSettings?.ContextShowInPreview ?? true,
         TemplateLanguage = _loadedSettings?.TemplateLanguage ?? "zh",
-        SettingsStyle = _loadedSettings?.SettingsStyle ?? "A",        HistoryEnabled = HistoryEnabledCheckBox.IsChecked != false,
+        SettingsStyle = _loadedSettings?.SettingsStyle ?? "A",
+        HistoryEnabled = HistoryEnabledCheckBox.IsChecked != false,
         ShowContinueButton = ShowContinueToggle.IsChecked != false,
         AutoContinueEnabled = AutoContinueToggle.IsChecked == true,
         AutoContinueText = string.IsNullOrWhiteSpace(AutoContinueTextBox.Text) ? "继续" : AutoContinueTextBox.Text.Trim(),
@@ -101,6 +118,48 @@ public partial class SettingsWindow : Window
     {
         if (!int.TryParse((text ?? string.Empty).Trim(), out var seconds)) return 10;
         return Math.Clamp(seconds, 3, 600);
+    }
+
+    private static int ParseContextBudget(string? text)
+    {
+        if (!int.TryParse((text ?? string.Empty).Trim(), out var budget)) return 1200;
+        return Math.Clamp(budget, 200, 4000);
+    }
+
+    private static int ParseContextMessageLimit(string? text)
+    {
+        if (!int.TryParse((text ?? string.Empty).Trim(), out var limit)) return 6;
+        return Math.Clamp(limit, 0, 20);
+    }
+
+    private static int ParseContextStaleSeconds(string? text)
+    {
+        if (!int.TryParse((text ?? string.Empty).Trim(), out var seconds)) return 300;
+        return Math.Clamp(seconds, 30, 3600);
+    }
+
+    private void ContextEnabledToggle_OnCheckChanged(object sender, RoutedEventArgs e) => UpdateContextControlsEnabled();
+
+    private void UpdateContextControlsEnabled()
+    {
+        if (ContextEnabledToggle is null ||
+            ContextThreadTailCheck is null ||
+            ContextGitCheck is null ||
+            ContextWorkspaceMetaCheck is null ||
+            ContextTokenBudgetBox is null ||
+            ContextMessageLimitBox is null ||
+            ContextStaleSecondsBox is null)
+        {
+            return;
+        }
+
+        var enabled = ContextEnabledToggle.IsChecked == true;
+        ContextThreadTailCheck.IsEnabled = enabled;
+        ContextGitCheck.IsEnabled = enabled;
+        ContextWorkspaceMetaCheck.IsEnabled = enabled;
+        ContextTokenBudgetBox.IsEnabled = enabled;
+        ContextMessageLimitBox.IsEnabled = enabled;
+        ContextStaleSecondsBox.IsEnabled = enabled;
     }
 
     private void SelectReasoning(string value)

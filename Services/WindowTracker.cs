@@ -90,6 +90,21 @@ public sealed class WindowTracker
         catch (COMException) { return null; }
     }
 
+    /// <summary>
+    /// 读取当前窗口 header 的会话标题（供上下文定位使用）。复用已有的按钮快照缓存，失败返回 null。
+    /// </summary>
+    public string? TryGetThreadTitle(IntPtr windowHandle)
+    {
+        try
+        {
+            var root = GetRoot(windowHandle);
+            if (root is null) return null;
+            return TryGetHeaderThreadTitle(root, GetButtonSnapshot(windowHandle, root));
+        }
+        catch (ElementNotAvailableException) { return null; }
+        catch (InvalidOperationException) { return null; }
+        catch (COMException) { return null; }
+    }
     private static string? TryGetHeaderThreadTitle(AutomationElement root, IReadOnlyList<ButtonInfo> buttons)
     {
         try

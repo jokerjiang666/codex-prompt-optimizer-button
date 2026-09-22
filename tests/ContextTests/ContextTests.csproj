@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    离线断言工程：直接把 Services/Context/** 与 PromptComposer 源码编进来，
+    因此不需要引用 WPF 主工程，也不需要 Windows Desktop 运行时，可在 CI/命令行直接跑。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ContextTests</AssemblyName>
+    <RootNamespace>CodexInputEnhancer.ContextTests</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="..\..\Services\Context\**\*.cs" LinkBase="Context" />
+    <Compile Include="..\..\Services\PromptComposer.cs" LinkBase="App" />
+    <Compile Include="..\..\Models\AppSettings.cs" LinkBase="App" />
+    <Compile Include="..\..\Models\OptimizationTemplate.cs" LinkBase="App" />
+  </ItemGroup>
+
+</Project>

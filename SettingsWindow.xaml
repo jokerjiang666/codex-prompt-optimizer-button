@@ -775,6 +775,40 @@
 
                         <Border Background="#FAFBFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="16" Margin="0,14,0,0">
                             <StackPanel>
+                                <TextBlock Text="上下文" FontWeight="SemiBold" />
+                                <TextBlock Text="开启后，点击星芒优化时会把本机当前会话摘要（工作目录、最近对话、工作区 git 摘要）随请求一起发送给你配置的模型服务商；默认关闭，关闭时不读取任何本地会话文件。" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SubtleBrush}" />
+
+                                <Grid Margin="0,14,0,0">
+                                    <TextBlock Text="启用上下文增强" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ToggleButton x:Name="ContextEnabledToggle" Style="{StaticResource PillToggleStyle}" HorizontalAlignment="Right"
+                                                  Checked="ContextEnabledToggle_OnCheckChanged" Unchecked="ContextEnabledToggle_OnCheckChanged" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                    <CheckBox x:Name="ContextThreadTailCheck" Content="最近对话" Margin="0,0,24,0" />
+                                    <CheckBox x:Name="ContextGitCheck" Content="工作区 git 摘要" Margin="0,0,24,0" />
+                                    <CheckBox x:Name="ContextWorkspaceMetaCheck" Content="会话与项目信息" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                    <StackPanel Margin="0,0,24,0">
+                                        <TextBlock Text="token 预算（200-4000）" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <TextBox x:Name="ContextTokenBudgetBox" Width="120" HorizontalAlignment="Left" MaxLength="4" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,24,0">
+                                        <TextBlock Text="最近对话条数（0-20）" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <TextBox x:Name="ContextMessageLimitBox" Width="120" HorizontalAlignment="Left" MaxLength="2" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="会话新鲜度上限（秒，30-3600）" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <TextBox x:Name="ContextStaleSecondsBox" Width="120" HorizontalAlignment="Left" MaxLength="4" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#FAFBFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="16" Margin="0,14,0,0">
+                            <StackPanel>
                                 <Grid>
                                     <TextBlock Text="自动检测中断并发送" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <ToggleButton x:Name="AutoContinueToggle" Style="{StaticResource PillToggleStyle}" HorizontalAlignment="Right" />

@@ -29,6 +29,7 @@ public sealed class MainController : IDisposable
     private bool _busy;
     private string? _lastDiagnosticState;
     private SettingsWindow? _settingsWindow;
+    private ContextPipeline? _contextPipeline;
     private string _lastObservedDraft = string.Empty;
     private string? _pendingSentText;
     private DateTimeOffset _pendingSentExpiresAt;
@@ -331,13 +332,22 @@ public sealed class MainController : IDisposable
             variables = dialog.Values;
         }
 
-        var (systemPrompt, userPrompt) = PromptComposer.Compose(template, currentText, variables);
-
         _busy = true;
         _overlay.SetOptimizing(true);
         _optimizeCts = new CancellationTokenSource();
         var startedAt = DateTimeOffset.Now;
         WriteDiagnostic($"optimize=started provider={_settings.Provider} model={_settings.Model} template={template?.Id ?? "none"} inputChars={currentText.Length}");
+
+        // 上下文唯一闸门：关闭态下不读任何本地会话文件、不启动 git、不做额外 UIA 遍历。
+        ContextSnapshot? context = null;
+        if (_settings.ContextEnabled)
+            context = await CollectContextAsync(target.WindowHandle, _optimizeCts.Token);
+
+        var (systemPrompt, userPrompt) = PromptComposer.Compose(
+            template,
+            currentText,
+            variables,
+            context?.HasContext == true ? context.Json : null);
 
         try
         {
@@ -358,7 +368,7 @@ public sealed class MainController : IDisposable
 
             if (_settings.PreviewBeforeApply)
             {
-                var choice = ShowOptimizePreview(template, currentText, optimized);
+        var choice = ShowOptimizePreview(template, currentText, optimized, BuildContextNote(context));
                 if (choice == PreviewChoice.Keep)
                 {
                     WriteDiagnostic("preview=keep");
@@ -471,13 +481,58 @@ public sealed class MainController : IDisposable
         _overlay.SetOptimizeModes(templates, _settings.ActiveTemplateId);
     }
 
+    /// <summary>
+    /// 采集本轮上下文：后台线程执行 + 5 秒整体超时；任何失败都降级为"不带上下文"。
+    /// 只有总开关打开时才会走到这里，也才会触碰本地会话文件与 git。
+    /// </summary>
+    private async Task<ContextSnapshot?> CollectContextAsync(IntPtr windowHandle, CancellationToken token)
+    {
+        try
+        {
+            _contextPipeline ??= ContextPipeline.Create(_settings);
+            var pipeline = _contextPipeline;
+            var title = _windowTracker.TryGetThreadTitle(windowHandle);
+
+            var snapshot = await Task.Run(() =>
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(5));
+                return pipeline.Build(title, timeout.Token);
+            }, token);
+
+            if (snapshot is not null) WriteDiagnostic(snapshot.Diagnostic);
+            return snapshot;
+        }
+        catch (OperationCanceledException)
+        {
+            WriteDiagnostic("ctx=cancelled");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            WriteDiagnostic($"ctx=failed type={ex.GetType().Name}");
+            return null;
+        }
+    }
+
+    /// <summary>预览里显示的上下文摘要（只显示来源与规模，不显示上下文正文）。</summary>
+    private string? BuildContextNote(ContextSnapshot? context)
+    {
+        if (!_settings.ContextShowInPreview) return null;
+        if (!_settings.ContextEnabled) return "上下文：未启用";
+        if (context is null || !context.HasContext) return $"上下文：未命中（{context?.Diagnostic ?? "ctx=off"}）";
+        return $"上下文：{context.Sources.Count} 个来源 / 约 {context.EstimatedTokens} tokens";
+    }
+
     /// <summary>应用前预览：左右对比 + 应用/保留/再优化。</summary>
-    private PreviewChoice ShowOptimizePreview(OptimizationTemplate? template, string original, string updated)
+    private PreviewChoice ShowOptimizePreview(OptimizationTemplate? template, string original, string updated, string? contextNote = null)
     {
         var meta = $"模板：{template?.Name ?? "—"}";
         if (_settings.DeepOptimizeEnabled)
             meta += $"　·　深度优化 {Math.Clamp(_settings.DeepOptimizeRounds, 1, 3)} 轮";
         meta += $"　·　模型 {_settings.Model}";
+        if (!string.IsNullOrWhiteSpace(contextNote))
+            meta += $"　·　{contextNote}";
 
         try
         {
@@ -674,6 +729,7 @@ public sealed class MainController : IDisposable
     {
         _optimizeCts?.Cancel();
         _settings = settings;
+        _contextPipeline = null;
         _optimizer = OptimizerProviderFactory.Create(_settings, _secretStore.Read());
         _overlay.SetContinueVisible(_settings.ShowContinueButton, animate: false);
         RefreshOptimizeModes();

@@ -15,6 +15,14 @@
     <!-- 保留 app.manifest 的 PerMonitorV2（悬浮窗定位依赖它）；这里只是 WinForms 分析器的建议性告警。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
+  <!-- tests/ 下有独立的离线断言工程（由 tests\ContextTests\ContextTests.csproj 构建），不参与主工程编译。 -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />

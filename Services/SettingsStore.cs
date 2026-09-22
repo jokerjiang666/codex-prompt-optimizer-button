@@ -41,6 +41,9 @@ public sealed class SettingsStore
 
             if (TemplateLibrary.Ensure(settings)) changed = true;
 
+            if (settings.ContextTokenBudget is < 200 or > 4000) { settings.ContextTokenBudget = 1200; changed = true; }
+            if (settings.ContextMessageLimit is < 0 or > 20) { settings.ContextMessageLimit = 6; changed = true; }
+            if (settings.ContextStaleSeconds is < 30 or > 3600) { settings.ContextStaleSeconds = 300; changed = true; }
             if (changed) Save(settings);
             return settings;
         }

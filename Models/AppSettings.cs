@@ -51,6 +51,29 @@ public sealed class AppSettings
     /// <summary>替换草稿前先弹优化结果预览。</summary>
     public bool PreviewBeforeApply { get; set; } = true;
 
+    /// <summary>上下文增强总开关。默认关；关闭时不做任何上下文采集。</summary>
+    public bool ContextEnabled { get; set; }
+
+    /// <summary>携带最近对话尾部（仅在总开关开启时生效）。</summary>
+    public bool ContextThreadTailEnabled { get; set; } = true;
+
+    /// <summary>携带工作区 git 摘要（仅在总开关开启时生效）。</summary>
+    public bool ContextGitEnabled { get; set; } = true;
+
+    /// <summary>携带会话元信息：cwd / 分支 / 项目指令摘要。</summary>
+    public bool ContextWorkspaceMetaEnabled { get; set; } = true;
+
+    /// <summary>上下文 token 预算上限（估算值）。</summary>
+    public int ContextTokenBudget { get; set; } = 1200;
+
+    /// <summary>进入上下文的最近对话条数上限。</summary>
+    public int ContextMessageLimit { get; set; } = 6;
+
+    /// <summary>会话文件新鲜度上限（秒）；超过则认为不是当前会话。</summary>
+    public int ContextStaleSeconds { get; set; } = 300;
+
+    /// <summary>优化结果预览里显示本次上下文来源。</summary>
+    public bool ContextShowInPreview { get; set; } = true;
     /// <summary>模板语言：zh / en。</summary>
     public string TemplateLanguage { get; set; } = "zh";
 
